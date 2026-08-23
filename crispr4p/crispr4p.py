@@ -15,7 +15,7 @@ if __package__:
         get_cached,
     )
     from .design import TableSorting, run_design
-    from .coordinates import hit_coordinates
+    from .coordinates import hit_coordinates, slice_bounds
     from .genome import GenomePamIndex
     from .guides import (
         find_guides,
@@ -42,7 +42,7 @@ else:  # Support direct script execution.
         get_cached,
     )
     from design import TableSorting, run_design
-    from coordinates import hit_coordinates
+    from coordinates import hit_coordinates, slice_bounds
     from genome import GenomePamIndex
     from guides import (
         find_guides,
@@ -68,7 +68,7 @@ FASTA = datapath + 'Schizosaccharomyces_pombe.ASM294v2.26.dna.toplevel.fa'
 COORDINATES = datapath + 'COORDINATES.txt'
 SYNONIMS = datapath + 'SYNONIMS.txt'
 PRECOMPUTED = 'precomputed_stand_alone'
-PRECOMPUTED_VERSION = 3
+PRECOMPUTED_VERSION = 4
 ############### CONFIGURATION VALUES ###################
 SEED_LENGTH = 20
 UNIQUE_INDEX_LENGTH = (-12,-3)   # range of values selected for uniqueness
@@ -192,7 +192,7 @@ class PrimerDesign:
         crFasta = self.chromosomesData.get(chromosome, None)
         assert chromosome, 'Bad chromosome specified.'
         for x in (start, end):
-            assert x.isdigit() and int(x)>0 and int(x)<len(crFasta.sequence), \
+            assert x.isdigit() and int(x)>0 and int(x)<=len(crFasta.sequence), \
             'Bad chromosomes specified'
 
         assert int(start) < int(end), 'Start "%s" must be smaller than end "%s".' % (start, end)
@@ -202,21 +202,23 @@ class PrimerDesign:
     def _getUserNGGs(self, crFasta, start, end):
         # Do not leave guides from an earlier query if discovery fails.
         self.userNGGs = []
+        start_index, end_index = slice_bounds(start, end)
         self.userNGGs = find_guides(
             crFasta.sequence,
             crFasta.name,
-            start,
-            end,
+            start_index,
+            end_index - 1,
             hit_factory=NGG,
             reverse_complement=self.reverseComplement,
             seed_length=SEED_LENGTH,
         )
 
     def getPrimerGRNA(self, crFasta, start, end, ngg):
+        start_index, end_index = slice_bounds(start, end)
         return guide_primers(
             crFasta.sequence,
-            start,
-            end,
+            start_index,
+            end_index - 1,
             ngg,
             self.reverseComplement,
         )
@@ -388,10 +390,11 @@ class PrimerDesign:
             :param end: int
             :return: Tuple
         '''
+        start_index, end_index = slice_bounds(start, end)
         return build_hr_dna(
             crFasta.sequence,
-            start,
-            end,
+            start_index,
+            end_index,
             self.sequenceComplement_,
         )
 
@@ -406,10 +409,11 @@ class PrimerDesign:
         return self.CheckingPrimersWidth_(crFasta, start, end, 300)
 
     def CheckingPrimersWidth_(self, crFasta, start, end, width):
+        start_index, end_index = slice_bounds(start, end)
         return checking_primers(
             crFasta.sequence,
-            start,
-            end,
+            start_index,
+            end_index,
             width,
             self._numAlternativeCheckings,
             primer_designer=_design_primers,

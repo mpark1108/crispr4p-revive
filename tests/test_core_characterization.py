@@ -113,13 +113,13 @@ class TestCoreCharacterization(unittest.TestCase):
             self.table[0][1],
         )
 
-    def test_ade6_hr_sequences_are_unchanged(self) -> None:
+    def test_ade6_hr_sequences_use_the_inclusive_gene_interval(self) -> None:
         self.assertEqual([100, 100, 500], [len(value) for value in self.hr_dna])
         self.assertEqual(
             [
-                "3efe8b6edeeca79ecd414b61bebcf8f08a8e9100779c35ec6144871f206ea51b",
-                "024abcb465fdef8af25533b459abe0419cbc412d8b9ebc3eda4cc05a4174d89d",
-                "0c355f0be1819366d73f0604dac12a49db005672b345bc496ca715a286922318",
+                "3948f29bd72bc5059eff88921869de90f9c99190232e4add15ecbd5eac7629dc",
+                "62b0d6cbd581c1824d3437af1aeab7777ccc8127bc0642de72553f856ca0a78a",
+                "66476b056e174bd5d37b0119377f2a829b9d0b01dc6295b7a6906faaeb4b5718",
             ],
             [
                 hashlib.sha256(value.encode("ascii")).hexdigest()
@@ -127,19 +127,25 @@ class TestCoreCharacterization(unittest.TestCase):
             ],
         )
 
-    def test_ade6_checking_primers_are_unchanged(self) -> None:
+    def test_ade6_checking_primers_use_the_inclusive_gene_interval(self) -> None:
         self.assertEqual(2, len(self.checking_primers))
         first, second = self.checking_primers
 
-        self.assertEqual("ACTGCGCACTAACTCACTACA", first["PRIMER_LEFT_0_SEQUENCE"])
+        self.assertEqual("AGCCTGGTGCAGTATAAGGT", first["PRIMER_LEFT_0_SEQUENCE"])
         self.assertEqual("CGTCGCAGCACATTATTCGG", first["PRIMER_RIGHT_0_SEQUENCE"])
-        self.assertEqual(255, first["PRIMER_PAIR_0_PRODUCT_SIZE"])
-        self.assertEqual(1913, first["negative_result"])
+        self.assertEqual(444, first["PRIMER_PAIR_0_PRODUCT_SIZE"])
+        self.assertEqual(2103, first["negative_result"])
 
         self.assertEqual("ACTGCGCACTAACTCACTACA", second["PRIMER_LEFT_1_SEQUENCE"])
-        self.assertEqual("CAGCACATTATTCGGGGGGT", second["PRIMER_RIGHT_1_SEQUENCE"])
-        self.assertEqual(250, second["PRIMER_PAIR_1_PRODUCT_SIZE"])
-        self.assertEqual(1908, second["negative_result"])
+        self.assertEqual("CGTCGCAGCACATTATTCGG", second["PRIMER_RIGHT_1_SEQUENCE"])
+        self.assertEqual(254, second["PRIMER_PAIR_1_PRODUCT_SIZE"])
+        self.assertEqual(1913, second["negative_result"])
+
+    def test_ade6_endpoint_guides_use_the_inclusive_interval(self) -> None:
+        guides = {row[0]: row[1][3] for row in self.table}
+
+        self.assertEqual((1316357, 1316359), guides["ATGAGCGAAAAACAGGTTGT"])
+        self.assertNotIn("TTGGAAAAATTATTCTGCAT", guides)
 
     def test_legacy_runweb_result_shape_and_arguments_are_unchanged(self) -> None:
         legacy_result = (
@@ -183,11 +189,11 @@ class TestCoreCharacterization(unittest.TestCase):
                 )
 
                 self.assertEqual(
-                    "SPCC1322.13_v3_n0.pickle",
+                    "SPCC1322.13_v4_n0.pickle",
                     os.path.basename(gene_path),
                 )
                 self.assertEqual(
-                    "III_100_200_v3_n2.pickle",
+                    "III_100_200_v4_n2.pickle",
                     os.path.basename(coordinate_path),
                 )
         finally:

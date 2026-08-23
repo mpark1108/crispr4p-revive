@@ -9,6 +9,8 @@ from crispr4p.primers import build_hr_dna, checking_primers
 SEQUENCE = "A" * 300 + "G" * 200 + "C" * 300
 START = 300
 END = 500
+PUBLIC_START = START + 1
+PUBLIC_END = END
 WIDTH = 300
 
 
@@ -131,7 +133,11 @@ class TestPrimerComputations(unittest.TestCase):
             "crispr4p.crispr4p.build_hr_dna",
             return_value=hr_sentinel,
         ) as build_hr:
-            hr_result = designer.HR_DNA(chromosome, START, END)
+            hr_result = designer.HR_DNA(
+                chromosome,
+                PUBLIC_START,
+                PUBLIC_END,
+            )
 
         self.assertIs(hr_sentinel, hr_result)
         build_hr.assert_called_once_with(
@@ -147,8 +153,8 @@ class TestPrimerComputations(unittest.TestCase):
         ) as design_checking:
             primer_result = designer.CheckingPrimersWidth_(
                 chromosome,
-                START,
-                END,
+                PUBLIC_START,
+                PUBLIC_END,
                 WIDTH,
             )
 
@@ -172,10 +178,19 @@ class TestPrimerComputations(unittest.TestCase):
             "CheckingPrimersWidth_",
             return_value=sentinel,
         ) as design_width:
-            result = designer.CheckingPrimers(chromosome, START, END)
+            result = designer.CheckingPrimers(
+                chromosome,
+                PUBLIC_START,
+                PUBLIC_END,
+            )
 
         self.assertIs(sentinel, result)
-        design_width.assert_called_once_with(chromosome, START, END, 300)
+        design_width.assert_called_once_with(
+            chromosome,
+            PUBLIC_START,
+            PUBLIC_END,
+            300,
+        )
 
 
 if __name__ == "__main__":

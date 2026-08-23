@@ -45,11 +45,11 @@ class TestResultCache(unittest.TestCase):
 
             self.assertTrue(cache_directory.is_dir())
             self.assertEqual(
-                "SPCC1322.13_v3_n0.pickle",
+                "SPCC1322.13_v4_n0.pickle",
                 Path(gene_path).name,
             )
             self.assertEqual(
-                "III_100_200_v3_n2.pickle",
+                "III_100_200_v4_n2.pickle",
                 Path(region_path).name,
             )
 
@@ -145,11 +145,11 @@ class TestPrimerDesignCacheAdapters(unittest.TestCase):
 
             self.assertTrue(cache_directory.is_dir())
             self.assertEqual(
-                "SPCC1322.13_v3_n0.pickle",
+                "SPCC1322.13_v4_n0.pickle",
                 Path(gene_path).name,
             )
             self.assertEqual(
-                "III_100_200_v3_n2.pickle",
+                "III_100_200_v4_n2.pickle",
                 Path(region_path).name,
             )
 

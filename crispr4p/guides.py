@@ -27,6 +27,8 @@ def find_guides(
         # Lookahead retains both PAMs when the interval contains GGG.
         for match in re.finditer(r"(?=GG)", sequence):
             position = match.start()
+            if position < seed_length + 1:
+                continue
             pam = sequence[position - 1:position + 2]
             seed = sequence[
                 position - seed_length - 1:position - 1

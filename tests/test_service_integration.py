@@ -186,20 +186,20 @@ class TestServiceIntegration(unittest.TestCase):
 
     def test_real_cli_result_bodies_are_byte_for_byte_compatible(self) -> None:
         self.assertEqual(
-            "92d5e997a3e070d33ed09f45c3d77151bfb215d5bdfbdc2aa4d6f8ea1ef14c20",
+            "ff3d2cce276ae88fcd7596ba1986208bce0ca254e0ac7c4909be487cc6d9d4c9",
             hashlib.sha256(
                 format_design(self.design_result).encode("utf-8")
             ).hexdigest(),
         )
 
-    def test_version_3_cache_round_trip_excludes_shared_index(self) -> None:
+    def test_version_4_cache_round_trip_excludes_shared_index(self) -> None:
         with tempfile.TemporaryDirectory() as cache_directory:
             cold_service = Crispr4pService.from_project_data(
                 precomputed_folder=cache_directory,
             )
             cold_result = cold_service.design_gene("ade6")
             cache_path = (
-                Path(cache_directory) / "SPCC1322.13_v3_n0.pickle"
+                Path(cache_directory) / "SPCC1322.13_v4_n0.pickle"
             )
 
             with cache_path.open("rb") as cache_file:

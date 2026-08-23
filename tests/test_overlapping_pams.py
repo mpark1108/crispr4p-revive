@@ -33,7 +33,7 @@ class TestOverlappingPams(unittest.TestCase):
                     sequence=reference,
                 )
 
-                designer._getUserNGGs(chromosome, 0, len(reference) - 1)
+                designer._getUserNGGs(chromosome, 1, len(reference))
 
                 self.assertTrue(
                     any(

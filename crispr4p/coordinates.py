@@ -1,6 +1,13 @@
 """PAM and cut-site coordinates."""
 
 
+def slice_bounds(start, end):
+    """Convert a 1-based inclusive interval to a Python slice."""
+    if start < 1 or end < start:
+        raise ValueError("invalid 1-based interval")
+    return start - 1, end
+
+
 def cut_from_pam(pam_start, pam_end, strand):
     """Convert a 1-based inclusive PAM to the bases flanking the cut."""
     if strand == 1:
