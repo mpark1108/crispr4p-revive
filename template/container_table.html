@@ -95,15 +95,29 @@
     <div id="spedit_error" class="annotation_warning"></div>
   </div>
 
-  <h3 class="toggle_header project_workflow_header">
+  <div id="cassette_setup" class="workflow_section project_workflow">
+    <div id="cassette_setup_status"></div>
+    <div id="cassette_setup_content">
+      <div class="l_field">Stop cassette:</div>
+      <div class="r_field">
+        <select id="stop_cassette_menu" onchange="load_formats();"></select>
+      </div><br>
+      <div class="l_field">Cassette format:</div>
+      <div class="r_field">
+        <select id="cassette_format_menu" onchange="update_format();">
+          <option value="">Choose a cassette format...</option>
+        </select>
+      </div><br>
+    </div>
+  </div>
+
+  <h3 id="stop_cassette_header" class="toggle_header project_workflow_header" style="display: none;">
     <button type="button" class="toggle_button" aria-expanded="false" aria-controls="stop_cassette_design" onclick="toggle_interface(document.getElementById('stop_cassette_design'), this)">Stop-Cassette Disruption Design</button>
   </h3>
   <div id="stop_cassette_design" class="workflow_section project_workflow" style="display: none;">
     <div id="stop_cassette_status"></div>
     <div id="stop_cassette_content">
     <h5>Disruption cassette</h5>
-    <div class="l_field">Candidate:</div>
-    <div class="r_field"><select id="stop_cassette_menu" onchange="update_cassette();"></select></div><br>
     <div class="l_field">Cassette sequence (coding strand):</div><div class="r_field" id="stop_cassette_sequence"></div><br>
     <div class="l_field">Length:</div><div class="r_field" id="stop_cassette_length"></div><br>
     <div class="l_field">Rescue protospacer:</div><div class="r_field" id="rescue_protospacer"></div><br>
@@ -142,8 +156,24 @@
     <div class="l_field">Expected WT product:</div><div class="r_field" id="insertion_primer_wt_size"></div><br>
     <div class="l_field">Expected disrupted product:</div><div class="r_field" id="insertion_primer_disrupted_size"></div><br>
 
+    <div id="diagnostic_pcr" style="display: none;">
+      <h6>PCR-RFLP</h6>
+      <div class="l_field">Enzyme:</div><div class="r_field" id="diagnostic_enzyme"></div><br>
+      <div class="l_field">Recognition site:</div><div class="r_field" id="diagnostic_site"></div><br>
+      <div class="l_field">Undigested disrupted product:</div><div class="r_field" id="diagnostic_product_size"></div><br>
+      <div class="l_field">Expected digest fragments:</div><div class="r_field" id="diagnostic_fragments"></div><br>
+      <div class="l_field">WT/restored product:</div><div class="r_field" id="diagnostic_wt_result"></div><br>
+      <div class="l_field">NEB resources:</div>
+      <div class="r_field">
+        <a id="diagnostic_product_link" target="_blank" rel="noopener noreferrer"></a>
+        <span aria-hidden="true"> &middot; </span>
+        <a id="diagnostic_protocol_link" target="_blank" rel="noopener noreferrer"></a>
+      </div><br>
+    </div>
+
     <details id="junction_primer_details" class="annotation_details">
       <summary>Junction-checking primers</summary>
+      <div id="junction_primer_status"></div>
       <h6>Left-junction PCR</h6>
       <div class="l_field">CkFw:</div><div class="r_field" id="left_junction_forward"></div><br>
       <div class="l_field">CkFw Tm:</div><div class="r_field" id="left_junction_forward_tm"></div><br>
@@ -163,7 +193,7 @@
     </div>
   </div>
 
-  <h3 class="toggle_header project_workflow_header">
+  <h3 id="restoration_header" class="toggle_header project_workflow_header" style="display: none;">
     <button type="button" class="toggle_button" aria-expanded="false" aria-controls="wild_type_restoration" onclick="toggle_interface(document.getElementById('wild_type_restoration'), this)">Wild-Type Restoration Design</button>
   </h3>
   <div id="wild_type_restoration" class="workflow_section project_workflow" style="display: none;">
@@ -476,16 +506,15 @@
       }
     }
 
-    function hr_oligos(sequence, donor) {
-      var overlap_start = sequence.length - donor.hrrv_length;
+    function hr_oligos(sequence, overlap_start, overlap_end) {
       return {
-        forward: sequence.slice(0, donor.hrfw_length),
+        forward: sequence.slice(0, overlap_end),
         reverse: rev_complement(sequence.slice(overlap_start)),
-        overlap: sequence.slice(overlap_start, donor.hrfw_length)
+        overlap: sequence.slice(overlap_start, overlap_end)
       };
     }
 
-    function update_donor(guide_number, cassette) {
+    function update_donor(guide_number, cassette, option) {
       var donor = donor_arms[Number(guide_number)] || null;
       var arm_length = "";
       var left_arm = "";
@@ -501,13 +530,17 @@
       var overlap_reverse = "";
       var overlap_length = "";
       var hr_product_length = "";
-      if (donor && cassette) {
-        var oriented_insert = cassette.sequence;
-        if (donor.coding_strand === "-") {
-          oriented_insert = rev_complement(oriented_insert);
-        }
+      if (donor && cassette && option) {
+        var oriented_insert = option.insert;
         var donor_sequence =
           donor.left_arm + oriented_insert + donor.right_arm;
+        var oriented_core = cassette.sequence;
+        if (donor.coding_strand === "-") {
+          oriented_core = rev_complement(oriented_core);
+        }
+        var overlap_start = donor.left_arm.length +
+          oriented_insert.indexOf(oriented_core);
+        var overlap_end = overlap_start + oriented_core.length;
 
         arm_length = donor.arm_length + " bp each";
         left_arm = "5'-" + donor.left_arm + "-3'";
@@ -515,17 +548,21 @@
         right_arm = "5'-" + donor.right_arm + "-3'";
         sequence = "5'-" + donor_sequence + "-3'";
         reverse = "5'-" + rev_complement(donor_sequence) + "-3'";
-        cassette_length = cassette.length + " bp";
+        cassette_length = option.length + " bp";
         total_length = donor_sequence.length + " bp";
-        var oligos = hr_oligos(donor_sequence, donor);
+        var oligos = hr_oligos(
+          donor_sequence,
+          overlap_start,
+          overlap_end
+        );
         hrfw = "5'-" + oligos.forward + "-3' (" +
           oligos.forward.length + " nt)";
         hrrv = "5'-" + oligos.reverse + "-3' (" +
           oligos.reverse.length + " nt)";
         overlap = "5'-" + oligos.overlap + "-3'";
         overlap_reverse = "5'-" + rev_complement(oligos.overlap) + "-3'";
-        overlap_length = donor.overlap_length + " nt";
-        hr_product_length = donor.hr_product_length + " bp";
+        overlap_length = oligos.overlap.length + " nt";
+        hr_product_length = donor_sequence.length + " bp";
       }
 
       document.getElementById("donor_arm_length").textContent = arm_length;
@@ -604,7 +641,11 @@
         "5'-" + rev_complement(sequence) + "-3'";
       document.getElementById("restoration_total_length").textContent =
         sequence.length + " bp";
-      var oligos = hr_oligos(sequence, donor);
+      var oligos = hr_oligos(
+        sequence,
+        sequence.length - donor.hrrv_length,
+        donor.hrfw_length
+      );
       document.getElementById("restoration_hrfw").textContent =
         "5'-" + oligos.forward + "-3' (" + oligos.forward.length + " nt)";
       document.getElementById("restoration_hrrv").textContent =
@@ -619,65 +660,211 @@
         donor.hr_product_length + " bp";
     }
 
-    function update_cassette(guide_number) {
-      var menu = document.getElementById("stop_cassette_menu");
+    function set_designs_visible(visible) {
+      var stop_header = document.getElementById("stop_cassette_header");
+      var restoration_header = document.getElementById("restoration_header");
+      stop_header.style.display = visible ? "" : "none";
+      restoration_header.style.display = visible ? "" : "none";
+
+      if (!visible) {
+        document.getElementById("stop_cassette_design").style.display = "none";
+        document.getElementById("wild_type_restoration").style.display = "none";
+        stop_header.querySelector("button").setAttribute("aria-expanded", "false");
+        restoration_header.querySelector("button").setAttribute(
+          "aria-expanded", "false"
+        );
+        designs_visible = false;
+      } else if (!designs_visible) {
+        document.getElementById("stop_cassette_design").style.display = "";
+        stop_header.querySelector("button").setAttribute("aria-expanded", "true");
+        designs_visible = true;
+      }
+    }
+
+    function frame_profile(sequence, frame) {
+      var codons = [];
+      for (var start = frame; start + 2 < sequence.length; start += 3) {
+        var codon = sequence.slice(start, start + 3);
+        if (codon === "TAA" || codon === "TAG" || codon === "TGA") {
+          codon += "*";
+        }
+        codons.push(codon);
+      }
+      return codons.join(" ");
+    }
+
+    function format_option() {
+      var id = document.getElementById("cassette_format_menu").value;
+      for (var index = 0; index < active_formats.length; index++) {
+        if (active_formats[index].id === id) {
+          return active_formats[index];
+        }
+      }
+      return null;
+    }
+
+    function show_formats(formats) {
+      var menu = document.getElementById("cassette_format_menu");
+      menu.options.length = 0;
+      menu.appendChild(new Option("Choose a cassette format...", ""));
+      for (var index = 0; index < formats.length; index++) {
+        var item = formats[index];
+        var label = item.label;
+        if (!item.available) {
+          label += " — unavailable at this site";
+        }
+        var option = new Option(label, item.id);
+        option.disabled = !item.available;
+        option.selected = item.id === selected_format_id && item.available;
+        menu.appendChild(option);
+      }
+      menu.disabled = false;
+      active_formats = formats;
+      if (!menu.value) {
+        selected_format_id = "";
+      }
+      update_format();
+    }
+
+    function load_formats(guide_number) {
       if (guide_number === undefined) {
-        var selected = document.querySelector('input[name="gRNA"]:checked');
-        guide_number = selected ? selected.value : 0;
+        guide_number = selected_guide_number();
       } else {
         create_cassette_menu(guide_number);
       }
-      var cassette = cassette_catalog[menu.value] || null;
-      var annotation = annotation_rows[Number(guide_number)];
+      var index = Number(guide_number);
+      var annotation = annotation_rows[index];
       var non_coding = annotation && annotation.coding_target === false;
-      document.getElementById("stop_cassette_status").textContent =
-        non_coding ? "Selected target is non-coding." : "";
-      document.getElementById("stop_cassette_content").style.display =
-        non_coding ? "none" : "";
-      if (non_coding) {
-        menu.options.length = 0;
-        update_donor(guide_number, null);
-        update_restoration(guide_number, null);
+      var no_strand = !non_coding && (
+        !annotation || !annotation.coding_strand || !donor_arms[index]
+      );
+      var setup = document.getElementById("cassette_setup_content");
+      var cassette_menu = document.getElementById("stop_cassette_menu");
+      var format_menu = document.getElementById("cassette_format_menu");
+
+      document.getElementById("cassette_setup_status").textContent = non_coding
+        ? "Selected target is non-coding."
+        : (no_strand ? "Target coding strand is not determined." : "");
+      setup.style.display = non_coding || no_strand ? "none" : "";
+      if (non_coding || no_strand) {
+        cassette_menu.options.length = 0;
+        active_formats = [];
+        set_designs_visible(false);
+        return;
+      }
+
+      var cassette = cassette_catalog[cassette_menu.value] || null;
+      if (!annotation || !cassette) {
+        active_formats = [];
+        set_designs_visible(false);
+        return;
+      }
+      if (format_menu.value) {
+        selected_format_id = format_menu.value;
+      }
+
+      var key = index + ":" + cassette.id;
+      if (format_cache[key]) {
+        show_formats(format_cache[key]);
+        return;
+      }
+
+      set_designs_visible(false);
+      active_formats = [];
+      format_menu.options.length = 0;
+      var loading = new Option("Checking cassette formats...", "");
+      loading.disabled = true;
+      format_menu.appendChild(loading);
+      format_menu.disabled = true;
+      if (format_requests[key]) {
+        return;
+      }
+
+      format_requests[key] = true;
+      var params = new URLSearchParams({
+        chromosome: annotation.chromosome,
+        cut_left: annotation.cut_coordinates[0],
+        cut_right: annotation.cut_coordinates[1],
+        guide: rows[index][0],
+        cassette_id: cassette.id,
+        coding_strand: annotation.coding_strand
+      });
+      fetch("/cassette-options?" + params.toString(), {cache: "no-store"})
+        .then(function(response) {
+          return response.json().then(function(data) {
+            if (!response.ok) {
+              throw new Error(data.error || "Cassette formats are unavailable.");
+            }
+            return data.formats;
+          });
+        })
+        .then(function(formats) {
+          format_cache[key] = formats;
+          delete format_requests[key];
+          if (selected_guide_number() === index &&
+              cassette_menu.value === cassette.id.toString()) {
+            show_formats(formats);
+          }
+        })
+        .catch(function(error) {
+          delete format_requests[key];
+          if (selected_guide_number() === index &&
+              cassette_menu.value === cassette.id.toString()) {
+            format_menu.options.length = 0;
+            format_menu.appendChild(new Option(error.message, ""));
+            format_menu.disabled = true;
+          }
+        });
+    }
+
+    function update_format() {
+      var index = selected_guide_number();
+      var cassette_menu = document.getElementById("stop_cassette_menu");
+      var cassette = cassette_catalog[cassette_menu.value] || null;
+      var option = format_option();
+      selected_format_id = option ? option.id : "";
+      if (index === null || !cassette || !option) {
+        set_designs_visible(false);
+        update_donor(index || 0, null, null);
+        update_restoration(index || 0, null);
         clear_insertion_primers();
         return;
       }
-      var strand = annotation ? annotation.coding_strand : null;
 
+      var annotation = annotation_rows[index];
+      document.getElementById("stop_cassette_status").textContent = "";
+      document.getElementById("stop_cassette_content").style.display = "";
       document.getElementById("target_coding_strand").textContent =
-        strand || "not determined";
-      if (!cassette) {
-        document.getElementById("stop_cassette_sequence").textContent = "";
-        document.getElementById("stop_cassette_length").textContent = "";
-        document.getElementById("rescue_protospacer").textContent = "";
-        document.getElementById("rescue_pam").textContent = "";
-        document.getElementById("rescue_gc").textContent = "";
-        document.getElementById("stop_frame_0").textContent = "";
-        document.getElementById("stop_frame_1").textContent = "";
-        document.getElementById("stop_frame_2").textContent = "";
-        update_donor(guide_number, null);
-        update_restoration(guide_number, null);
-        clear_insertion_primers();
-        return;
-      }
-
+        annotation.coding_strand;
       document.getElementById("stop_cassette_sequence").textContent =
-        "5'-" + cassette.sequence + "-3'";
+        "5'-" + option.coding_sequence + "-3'";
       document.getElementById("stop_cassette_length").textContent =
-        cassette.length + " nt";
+        option.length + " nt";
       document.getElementById("rescue_protospacer").textContent =
         "5'-" + cassette.guide + "-3'";
       document.getElementById("rescue_pam").textContent = cassette.pam;
       document.getElementById("rescue_gc").textContent =
         cassette.gc_percent.toFixed(1) + "%%";
-      document.getElementById("stop_frame_0").textContent = cassette.frames[0];
-      document.getElementById("stop_frame_1").textContent = cassette.frames[1];
-      document.getElementById("stop_frame_2").textContent = cassette.frames[2];
-      update_donor(guide_number, cassette);
-      update_restoration(guide_number, cassette);
-      update_insertion_primers(guide_number, cassette);
+      document.getElementById("stop_frame_0").textContent =
+        frame_profile(option.coding_sequence, 0);
+      document.getElementById("stop_frame_1").textContent =
+        frame_profile(option.coding_sequence, 1);
+      document.getElementById("stop_frame_2").textContent =
+        frame_profile(option.coding_sequence, 2);
+
+      set_designs_visible(true);
+      update_donor(index, cassette, option);
+      update_restoration(index, cassette);
+      show_insertion_primers(option.primers, option);
     }
 
-    function show_insertion_primers(pair) {
+    function show_insertion_primers(pair, option) {
+      if (!pair) {
+        clear_insertion_primers(
+          "No insertion-checking primer pair was found."
+        );
+        return;
+      }
       document.getElementById("insertion_primer_status").textContent = "";
       document.getElementById("insertion_primer_forward").textContent =
         "5'-" + pair.forward + "-3'";
@@ -692,33 +879,92 @@
       document.getElementById("insertion_primer_disrupted_size").textContent =
         pair.disrupted_product_size + " bp";
 
+      var junction_fields = [
+        "left_junction_forward", "left_junction_forward_tm",
+        "left_junction_reverse", "left_junction_reverse_tm",
+        "left_junction_wt_size", "left_junction_product_size",
+        "right_junction_forward", "right_junction_forward_tm",
+        "right_junction_reverse", "right_junction_reverse_tm",
+        "right_junction_wt_size", "right_junction_product_size"
+      ];
+      for (var field = 0; field < junction_fields.length; field++) {
+        document.getElementById(junction_fields[field]).textContent = "";
+      }
       var left = pair.left_junction;
-      document.getElementById("left_junction_forward").textContent =
-        "5'-" + left.forward + "-3'";
-      document.getElementById("left_junction_forward_tm").textContent =
-        Math.round(left.forward_tm) + " °C";
-      document.getElementById("left_junction_reverse").textContent =
-        "5'-" + left.reverse + "-3'";
-      document.getElementById("left_junction_reverse_tm").textContent =
-        Math.round(left.reverse_tm) + " °C";
-      document.getElementById("left_junction_wt_size").textContent =
-        "No product";
-      document.getElementById("left_junction_product_size").textContent =
-        left.product_size + " bp";
-
       var right = pair.right_junction;
-      document.getElementById("right_junction_forward").textContent =
-        "5'-" + right.forward + "-3'";
-      document.getElementById("right_junction_forward_tm").textContent =
-        Math.round(right.forward_tm) + " °C";
-      document.getElementById("right_junction_reverse").textContent =
-        "5'-" + right.reverse + "-3'";
-      document.getElementById("right_junction_reverse_tm").textContent =
-        Math.round(right.reverse_tm) + " °C";
-      document.getElementById("right_junction_wt_size").textContent =
-        "No product";
-      document.getElementById("right_junction_product_size").textContent =
-        right.product_size + " bp";
+      if (left && right) {
+        document.getElementById("junction_primer_status").textContent = "";
+        document.getElementById("left_junction_forward").textContent =
+          "5'-" + left.forward + "-3'";
+        document.getElementById("left_junction_forward_tm").textContent =
+          Math.round(left.forward_tm) + " °C";
+        document.getElementById("left_junction_reverse").textContent =
+          "5'-" + left.reverse + "-3'";
+        document.getElementById("left_junction_reverse_tm").textContent =
+          Math.round(left.reverse_tm) + " °C";
+        document.getElementById("left_junction_wt_size").textContent =
+          "No product";
+        document.getElementById("left_junction_product_size").textContent =
+          left.product_size + " bp";
+
+        document.getElementById("right_junction_forward").textContent =
+          "5'-" + right.forward + "-3'";
+        document.getElementById("right_junction_forward_tm").textContent =
+          Math.round(right.forward_tm) + " °C";
+        document.getElementById("right_junction_reverse").textContent =
+          "5'-" + right.reverse + "-3'";
+        document.getElementById("right_junction_reverse_tm").textContent =
+          Math.round(right.reverse_tm) + " °C";
+        document.getElementById("right_junction_wt_size").textContent =
+          "No product";
+        document.getElementById("right_junction_product_size").textContent =
+          right.product_size + " bp";
+      } else {
+        document.getElementById("junction_primer_status").textContent =
+          "Junction-checking primers are unavailable.";
+      }
+
+      var diagnostic = document.getElementById("diagnostic_pcr");
+      var diagnostic_fields = [
+        "diagnostic_enzyme", "diagnostic_site",
+        "diagnostic_product_size", "diagnostic_fragments",
+        "diagnostic_wt_result"
+      ];
+      for (var diagnostic_field = 0;
+           diagnostic_field < diagnostic_fields.length;
+           diagnostic_field++) {
+        document.getElementById(
+          diagnostic_fields[diagnostic_field]
+        ).textContent = "";
+      }
+      var product_link = document.getElementById("diagnostic_product_link");
+      var protocol_link = document.getElementById("diagnostic_protocol_link");
+      product_link.textContent = "";
+      product_link.removeAttribute("href");
+      protocol_link.textContent = "";
+      protocol_link.removeAttribute("href");
+      if (option.enzyme && option.digest) {
+        diagnostic.style.display = "";
+        document.getElementById("diagnostic_enzyme").textContent =
+          option.enzyme;
+        document.getElementById("diagnostic_site").textContent =
+          "5'-" + option.site + "-3'";
+        document.getElementById("diagnostic_product_size").textContent =
+          pair.disrupted_product_size + " bp";
+        document.getElementById("diagnostic_fragments").textContent =
+          option.digest.fragments.map(function(size) {
+            return size + " bp";
+          }).join(" + ");
+        document.getElementById("diagnostic_wt_result").textContent =
+          "Uncut (" + pair.wt_product_size + " bp)";
+        product_link.textContent = option.enzyme + " product and conditions";
+        product_link.href = option.product_url;
+        protocol_link.textContent =
+          "Set up " + option.enzyme + " digest in NEBcloner";
+        protocol_link.href = option.protocol_url;
+      } else {
+        diagnostic.style.display = "none";
+      }
 
       document.getElementById("restoration_primer_forward").textContent =
         "5'-" + pair.forward + "-3'";
@@ -745,6 +991,9 @@
         "right_junction_forward", "right_junction_forward_tm",
         "right_junction_reverse", "right_junction_reverse_tm",
         "right_junction_wt_size", "right_junction_product_size",
+        "diagnostic_enzyme", "diagnostic_site",
+        "diagnostic_product_size", "diagnostic_fragments",
+        "diagnostic_wt_result",
         "restoration_primer_forward", "restoration_primer_forward_tm",
         "restoration_primer_reverse", "restoration_primer_reverse_tm",
         "restoration_product_size"
@@ -752,67 +1001,13 @@
       for (var index = 0; index < fields.length; index++) {
         document.getElementById(fields[index]).textContent = "";
       }
+      document.getElementById("junction_primer_status").textContent = "";
+      document.getElementById("diagnostic_pcr").style.display = "none";
     }
 
     function selected_guide_number() {
       var selected = document.querySelector('input[name="gRNA"]:checked');
       return selected ? Number(selected.value) : null;
-    }
-
-    function update_insertion_primers(guide_number, cassette) {
-      var index = Number(guide_number);
-      var annotation = annotation_rows[index];
-      if (!annotation || !donor_arms[index] || !cassette) {
-        clear_insertion_primers();
-        return;
-      }
-      var key = index + ":" + cassette.id;
-      if (insertion_primer_cache[key]) {
-        show_insertion_primers(insertion_primer_cache[key]);
-        return;
-      }
-      if (insertion_primer_requests[key]) {
-        clear_insertion_primers();
-        return;
-      }
-
-      clear_insertion_primers();
-      insertion_primer_requests[key] = true;
-      var params = new URLSearchParams({
-        chromosome: annotation.chromosome,
-        cut_left: annotation.cut_coordinates[0],
-        cut_right: annotation.cut_coordinates[1],
-        cassette_id: cassette.id,
-        coding_strand: annotation.coding_strand
-      });
-      fetch("/insertion-primers?" + params.toString(), {cache: "no-store"})
-        .then(function(response) {
-          return response.json().then(function(data) {
-            if (!response.ok) {
-              throw new Error(data.error || "Checking primers are unavailable.");
-            }
-            return data;
-          });
-        })
-        .then(function(pair) {
-          insertion_primer_cache[key] = pair;
-          delete insertion_primer_requests[key];
-          var selected_cassette =
-            document.getElementById("stop_cassette_menu").value;
-          if (selected_guide_number() === index &&
-              selected_cassette === cassette.id.toString()) {
-            show_insertion_primers(pair);
-          }
-        })
-        .catch(function(error) {
-          delete insertion_primer_requests[key];
-          var selected_cassette =
-            document.getElementById("stop_cassette_menu").value;
-          if (selected_guide_number() === index &&
-              selected_cassette === cassette.id.toString()) {
-            clear_insertion_primers(error.message);
-          }
-        });
     }
 
     function update_primer(number) {
@@ -831,7 +1026,7 @@
 
       update_annotation(index);
       update_spedit(index);
-      update_cassette(index);
+      load_formats(index);
     }
 
     var rows = %(json_table)s;
@@ -842,8 +1037,11 @@
     var cassette_choices = cassette_data.choices;
     var donor_arms = %(donor_json)s;
     var restoration_rows = %(restoration_json)s;
-    var insertion_primer_cache = {};
-    var insertion_primer_requests = {};
+    var active_formats = [];
+    var selected_format_id = "";
+    var format_cache = {};
+    var format_requests = {};
+    var designs_visible = false;
 
     function create_table() {
       var table = document.getElementById("posTable");

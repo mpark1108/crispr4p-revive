@@ -103,10 +103,100 @@ class StopCassette:
 
 
 @dataclass(frozen=True, slots=True)
+class CassetteFormat:
+    """An optional diagnostic extension for a 23-nt stop cassette."""
+
+    id: str
+    label: str
+    tail: str = ""
+    enzyme: str | None = None
+    site: str | None = None
+    cut_offset: int | None = None
+
+    def __post_init__(self):
+        tail = self.tail.upper()
+        site = self.site.upper() if self.site else None
+        if not self.id or not self.label:
+            raise ValueError("cassette format requires an ID and label")
+        if set(tail) - set("ACGT"):
+            raise ValueError("cassette format contains an invalid nucleotide")
+        diagnostic = (self.enzyme, site, self.cut_offset)
+        missing = tuple(value is None for value in diagnostic)
+        if any(missing) and not all(missing):
+            raise ValueError("diagnostic format is incomplete")
+        if site is not None and not 0 < self.cut_offset < len(site):
+            raise ValueError("restriction cut must fall within its site")
+        if site is not None and site != reverse_complement(site):
+            raise ValueError("diagnostic recognition site must be palindromic")
+        object.__setattr__(self, "tail", tail)
+        object.__setattr__(self, "site", site)
+
+    @property
+    def length(self):
+        return SITE_LENGTH + len(self.tail)
+
+    def sequence(self, cassette):
+        sequence = cassette.sequence + self.tail
+        if self.site and sequence.count(self.site) != 1:
+            raise ValueError(
+                f"{self.enzyme} format must contain one recognition site"
+            )
+        return sequence
+
+    def orient(self, cassette, strand):
+        sequence = self.sequence(cassette)
+        if strand in (None, "+"):
+            return sequence
+        if strand == "-":
+            return reverse_complement(sequence)
+        raise ValueError("coding strand must be + or -")
+
+
+CASSETTE_FORMATS = (
+    CassetteFormat("none", "23 nt — no diagnostic site"),
+    CassetteFormat(
+        "asci",
+        "29 nt — AscI",
+        tail="CGCGCC",
+        enzyme="AscI",
+        site="GGCGCGCC",
+        cut_offset=2,
+    ),
+    CassetteFormat(
+        "paci",
+        "31 nt — PacI",
+        tail="TTAATTAA",
+        enzyme="PacI",
+        site="TTAATTAA",
+        cut_offset=5,
+    ),
+    CassetteFormat(
+        "swai",
+        "31 nt — SwaI",
+        tail="ATTTAAAT",
+        enzyme="SwaI",
+        site="ATTTAAAT",
+        cut_offset=4,
+    ),
+)
+NO_DIAGNOSTIC = CASSETTE_FORMATS[0]
+
+
+def cassette_format(format_id):
+    """Return a cassette format by its stable ID."""
+    format_id = str(format_id).strip().lower()
+    for item in CASSETTE_FORMATS:
+        if item.id == format_id:
+            return item
+    raise ValueError(f"unknown cassette format: {format_id}")
+
+
+@dataclass(frozen=True, slots=True)
 class DisruptionDonor:
     """A stop cassette with its locus-specific homology arms."""
 
     cassette: StopCassette
+    cassette_format: CassetteFormat
     coding_strand: str
     arm_length: int
     left_arm: str
@@ -127,11 +217,12 @@ class DisruptionDonor:
 
     @property
     def oligos(self):
-        start = len(self.left_arm)
+        core = self.cassette.orient(self.coding_strand)
+        start = len(self.left_arm) + self.insert.index(core)
         return overlap_oligos(
             self.sequence,
             start,
-            start + len(self.insert),
+            start + len(core),
         )
 
 
@@ -144,7 +235,14 @@ def _cut_index(reference, cut):
     return cut_left
 
 
-def build_donor(reference, cut, cassette, coding_strand, arm_length):
+def build_donor(
+    reference,
+    cut,
+    cassette,
+    coding_strand,
+    arm_length,
+    cassette_format=NO_DIAGNOSTIC,
+):
     """Build a disruption donor around a Cas9 cut boundary."""
     reference = reference.upper()
     cut_index = _cut_index(reference, cut)
@@ -161,10 +259,11 @@ def build_donor(reference, cut, cassette, coding_strand, arm_length):
 
     return DisruptionDonor(
         cassette=cassette,
+        cassette_format=cassette_format,
         coding_strand=coding_strand,
         arm_length=arm_length,
         left_arm=reference[cut_index - arm_length:cut_index],
-        insert=cassette.orient(coding_strand),
+        insert=cassette_format.orient(cassette, coding_strand),
         right_arm=reference[cut_index:cut_index + arm_length],
     )
 
@@ -212,7 +311,7 @@ def _recut_sites(window, insert_start, insert_end, guide, cassette_strand,
 
 
 def recut_sites(reference, cut, guide, cassette, coding_strand=None,
-                max_mismatches=4):
+                max_mismatches=4, cassette_format=NO_DIAGNOSTIC):
     """Find NGG/NAG junction targets similar to the first guide."""
     reference = reference.upper()
     guide = guide.upper()
@@ -229,7 +328,10 @@ def recut_sites(reference, cut, guide, cassette, coding_strand=None,
     sites = []
 
     for cassette_strand in strands:
-        insert = cassette.orient(cassette_strand)
+        if cassette_format is NO_DIAGNOSTIC:
+            insert = cassette.orient(cassette_strand)
+        else:
+            insert = cassette_format.orient(cassette, cassette_strand)
         window = left + insert + right
         insert_start = len(left)
         insert_end = insert_start + len(insert)

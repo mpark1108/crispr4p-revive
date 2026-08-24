@@ -1,11 +1,14 @@
 """CRISPR4P application service."""
 
 import os
+from dataclasses import replace
 from pathlib import Path
 
 from .annotations import GenomeAnnotations
 from .crispr4p import NGG, PrimerDesign
+from .diagnostics import CassetteOption, pcr_rflp
 from .disruption import (
+    CASSETTE_FORMATS,
     build_donor,
     load_cassettes,
     recut_sites,
@@ -388,6 +391,107 @@ class Crispr4pService:
             arm_length=arm_length,
             window=window,
         )
+
+    def cassette_options(
+        self,
+        chromosome,
+        cut_coordinates,
+        guide,
+        cassette_id,
+        coding_strand,
+        arm_length=80,
+        window=300,
+    ):
+        """Evaluate the selectable cassette formats at one cut site."""
+        resources = self._load_resources()
+        chromosome = str(chromosome).strip()
+        try:
+            reference = resources.chromosomes[chromosome].sequence
+        except KeyError:
+            raise ValueError(f"unknown chromosome: {chromosome}") from None
+
+        cassette = next(
+            (item for item in self.cassettes if item.id == cassette_id),
+            None,
+        )
+        if cassette is None:
+            raise ValueError(f"unknown cassette: {cassette_id}")
+        if coding_strand not in ("+", "-"):
+            raise ValueError("coding strand must be + or -")
+
+        try:
+            base_pair = design_insertion_primers(
+                reference,
+                cut_coordinates,
+                arm_length=arm_length,
+                window=window,
+                insert_length=len(cassette.sequence),
+            )
+        except PrimerNotFoundError:
+            base_pair = None
+
+        core = cassette.orient(coding_strand)
+        options = []
+        for item in CASSETTE_FORMATS:
+            insert = item.orient(cassette, coding_strand)
+            recut = recut_sites(
+                reference,
+                cut_coordinates,
+                guide,
+                cassette,
+                coding_strand,
+                cassette_format=item,
+            )
+            pair = (
+                replace(base_pair, insert_length=len(insert))
+                if base_pair is not None
+                else None
+            )
+            checks = None
+            if base_pair is not None:
+                try:
+                    checks = design_insertion_checks(
+                        reference,
+                        cut_coordinates,
+                        insert,
+                        arm_length=arm_length,
+                        window=window,
+                        core=core,
+                        spanning=base_pair,
+                    )
+                except PrimerNotFoundError:
+                    pass
+
+            digest = None
+            if item.enzyme is not None and pair is not None:
+                digest = pcr_rflp(
+                    reference,
+                    cut_coordinates,
+                    insert,
+                    pair,
+                    item,
+                    window=window,
+                )
+
+            available = not recut
+            if item.enzyme is not None:
+                available = (
+                    available
+                    and digest is not None
+                    and digest.available
+                )
+            options.append(
+                CassetteOption(
+                    cassette_format=item,
+                    coding_sequence=item.sequence(cassette),
+                    insert=insert,
+                    available=available,
+                    spanning=pair,
+                    checks=checks,
+                    digest=digest,
+                )
+            )
+        return tuple(options)
 
     def restoration_donors(
         self,

@@ -7,9 +7,19 @@ from unittest.mock import Mock, patch
 
 import webapp
 from crispr4p.annotations import GeneAnnotation, GenomeAnnotations
+from crispr4p.diagnostics import (
+    CassetteOption,
+    DigestResult,
+    digest_fragments,
+    find_sites,
+    pcr_rflp,
+)
 from crispr4p.disruption import (
+    CASSETTE_FORMATS,
+    NO_DIAGNOSTIC,
     StopCassette,
     build_donor,
+    cassette_format,
     has_junction_pam,
     load_cassettes,
     recut_sites,
@@ -108,6 +118,98 @@ class DisruptionDesignTests(unittest.TestCase):
             cassette.orient("-"),
         )
         self.assertEqual(FIRST, cassette.orient("+"))
+
+    def test_cassette_formats(self):
+        expected = {
+            "none": (23, None, None, None),
+            "asci": (29, "AscI", "GGCGCGCC", 2),
+            "paci": (31, "PacI", "TTAATTAA", 5),
+            "swai": (31, "SwaI", "ATTTAAAT", 4),
+        }
+
+        self.assertIs(NO_DIAGNOSTIC, cassette_format("none"))
+        with self.assertRaisesRegex(ValueError, "unknown cassette format"):
+            cassette_format("other")
+
+        for cassette in self.cassettes:
+            for item in CASSETTE_FORMATS:
+                sequence = item.sequence(cassette)
+                length, enzyme, site, cut_offset = expected[item.id]
+                self.assertEqual(length, len(sequence))
+                self.assertEqual(length, item.length)
+                self.assertEqual(enzyme, item.enzyme)
+                self.assertEqual(cut_offset, item.cut_offset)
+                self.assertEqual(sequence, item.orient(cassette, "+"))
+                self.assertEqual(
+                    reverse_complement(sequence),
+                    item.orient(cassette, "-"),
+                )
+                if site:
+                    self.assertEqual(1, sequence.count(site))
+
+        self.assertEqual(
+            {
+                "AscI": (
+                    "https://www.neb.com/en-us/products/r0558-asci",
+                    "https://nebcloner.neb.com/#!/protocol/re/single/AscI",
+                ),
+                "PacI": (
+                    "https://www.neb.com/en-us/products/r0547-paci",
+                    "https://nebcloner.neb.com/#!/protocol/re/single/PacI",
+                ),
+                "SwaI": (
+                    "https://www.neb.com/en-us/products/r0604-swai",
+                    "https://nebcloner.neb.com/#!/protocol/re/single/SwaI",
+                ),
+            },
+            webapp.NEB_LINKS,
+        )
+
+    def test_extended_donor_oligos_keep_core_overlap(self):
+        cassette = self.cassettes[0]
+        expected = {
+            "none": (183, 103, 103),
+            "asci": (189, 103, 109),
+            "paci": (191, 103, 111),
+            "swai": (191, 103, 111),
+        }
+
+        for item in CASSETTE_FORMATS:
+            plus = build_donor(
+                self.reference,
+                (1316791, 1316792),
+                cassette,
+                "+",
+                80,
+                item,
+            )
+            minus = build_donor(
+                self.reference,
+                (1316791, 1316792),
+                cassette,
+                "-",
+                80,
+                item,
+            )
+            total, short, long = expected[item.id]
+
+            self.assertEqual(item.sequence(cassette), plus.insert)
+            self.assertEqual(total, plus.total_length)
+            self.assertEqual((short, long), (
+                len(plus.oligos.forward),
+                len(plus.oligos.reverse),
+            ))
+            self.assertEqual((long, short), (
+                len(minus.oligos.forward),
+                len(minus.oligos.reverse),
+            ))
+            self.assertEqual(cassette.sequence, plus.oligos.overlap)
+            self.assertEqual(
+                reverse_complement(cassette.sequence),
+                minus.oligos.overlap,
+            )
+            self.assertEqual(plus.sequence, plus.oligos.product)
+            self.assertEqual(minus.sequence, minus.oligos.product)
 
     def test_invalid_candidate(self):
         with self.assertRaisesRegex(ValueError, "23 nt"):
@@ -285,6 +387,29 @@ class DisruptionDesignTests(unittest.TestCase):
                 (300, 301),
                 primer_designer=no_pair,
             )
+        self.assertEqual(3, no_pair.call_count)
+
+        fallback_answer = dict(answer)
+        fallback_answer["PRIMER_PAIR_0_PRODUCT_SIZE"] = 328
+        fallback_answer["PRIMER_RIGHT_0"] = [457, 20]
+        fallback = Mock(side_effect=[
+            {"PRIMER_PAIR_NUM_RETURNED": 0},
+            fallback_answer,
+        ])
+        pair = insertion_primers(
+            "A" * 300 + "C" * 300,
+            (300, 301),
+            primer_designer=fallback,
+        )
+        self.assertEqual(328, pair.wt_product_size)
+        self.assertEqual(
+            [[200, 300]],
+            fallback.call_args_list[0].args[1]["PRIMER_PRODUCT_SIZE_RANGE"],
+        )
+        self.assertEqual(
+            [[301, 350]],
+            fallback.call_args_list[1].args[1]["PRIMER_PRODUCT_SIZE_RANGE"],
+        )
 
     def test_junction_primer_inputs(self):
         spanning = {
@@ -368,6 +493,110 @@ class DisruptionDesignTests(unittest.TestCase):
                 primer_designer=rejected,
             )
 
+    def test_extended_insert_uses_core_junction_primer(self):
+        spanning = {
+            "PRIMER_PAIR_NUM_RETURNED": 1,
+            "PRIMER_LEFT_0_SEQUENCE": "FORWARD",
+            "PRIMER_RIGHT_0_SEQUENCE": "REVERSE",
+            "PRIMER_LEFT_0_TM": 59.4,
+            "PRIMER_RIGHT_0_TM": 60.2,
+            "PRIMER_PAIR_0_PRODUCT_SIZE": 298,
+            "PRIMER_LEFT_0": [130, 20],
+            "PRIMER_RIGHT_0": [427, 20],
+        }
+        checked = {
+            "PRIMER_PAIR_NUM_RETURNED": 1,
+            "PRIMER_LEFT_0_SEQUENCE": "FORWARD",
+            "PRIMER_RIGHT_0_SEQUENCE": "REVERSE",
+            "PRIMER_LEFT_0_TM": 59.4,
+            "PRIMER_RIGHT_0_TM": 59.1,
+            "PRIMER_PAIR_0_PRODUCT_SIZE": 1,
+        }
+        asci = cassette_format("asci")
+        full_insert = asci.sequence(self.cassettes[0])
+        designer = Mock(side_effect=(spanning, checked, checked))
+
+        checks = insertion_checks(
+            "A" * 300 + "C" * 300,
+            (300, 301),
+            full_insert,
+            core=FIRST,
+            primer_designer=designer,
+        )
+        left_args, left_settings = designer.call_args_list[1].args
+        right_args, right_settings = designer.call_args_list[2].args
+
+        self.assertEqual(327, checks.spanning.disrupted_product_size)
+        self.assertEqual(
+            reverse_complement(FIRST),
+            left_args["SEQUENCE_PRIMER_REVCOMP"],
+        )
+        self.assertEqual(FIRST, right_args["SEQUENCE_PRIMER"])
+        self.assertEqual([[193, 193]], left_settings["PRIMER_PRODUCT_SIZE_RANGE"])
+        self.assertEqual([[157, 157]], right_settings["PRIMER_PRODUCT_SIZE_RANGE"])
+
+        reverse_insert = reverse_complement(full_insert)
+        reverse_core = reverse_complement(FIRST)
+        reverse_designer = Mock(side_effect=(spanning, checked, checked))
+        insertion_checks(
+            "A" * 300 + "C" * 300,
+            (300, 301),
+            reverse_insert,
+            core=reverse_core,
+            primer_designer=reverse_designer,
+        )
+        reverse_left = reverse_designer.call_args_list[1].args[1]
+        reverse_right = reverse_designer.call_args_list[2].args[1]
+        self.assertEqual(
+            [[199, 199]],
+            reverse_left["PRIMER_PRODUCT_SIZE_RANGE"],
+        )
+        self.assertEqual(
+            [[151, 151]],
+            reverse_right["PRIMER_PRODUCT_SIZE_RANGE"],
+        )
+
+    def test_diagnostic_digest(self):
+        pair = InsertionPrimerPair(
+            forward="FORWARD",
+            reverse="REVERSE",
+            forward_tm=59.4,
+            reverse_tm=60.2,
+            wt_product_size=298,
+            insert_length=29,
+            forward_start=130,
+            reverse_end=427,
+        )
+        asci = cassette_format("asci")
+        insert = asci.sequence(self.cassettes[0])
+        result = pcr_rflp(
+            "A" * 300 + "C" * 300,
+            (300, 301),
+            insert,
+            pair,
+            asci,
+        )
+
+        self.assertTrue(result.available)
+        self.assertEqual((), result.wt_sites)
+        self.assertEqual((191,), result.edited_sites)
+        self.assertEqual((193, 134), result.fragments)
+        self.assertEqual((0, 4), find_sites("TTAATTAATTAA", "TTAATTAA"))
+        self.assertEqual((60, 40), digest_fragments(100, (38,), 2))
+
+        reference = list("A" * 300 + "C" * 300)
+        reference[200:208] = asci.site
+        conflict = pcr_rflp(
+            "".join(reference),
+            (300, 301),
+            insert,
+            pair,
+            asci,
+        )
+        self.assertFalse(conflict.available)
+        self.assertEqual(1, len(conflict.wt_sites))
+        self.assertEqual(2, len(conflict.edited_sites))
+
     def test_real_insertion_primers(self):
         service = Crispr4pService.from_project_data()
         guide = service.design_gene("ade6").guides[0]
@@ -439,6 +668,111 @@ class DisruptionDesignTests(unittest.TestCase):
                 1,
                 None,
             )
+
+    def test_real_cassette_options(self):
+        service = Crispr4pService.from_project_data()
+        guide = service.design_gene("ade6").guides[0]
+        options = service.cassette_options(
+            guide.chromosome,
+            guide.cut_coordinates,
+            guide.seed,
+            1,
+            "+",
+        )
+
+        self.assertEqual(("none", "asci", "paci", "swai"), tuple(
+            option.cassette_format.id for option in options
+        ))
+        self.assertTrue(all(option.available for option in options))
+        self.assertEqual((321, 327, 329, 329), tuple(
+            option.spanning.disrupted_product_size for option in options
+        ))
+        self.assertEqual((151, 157, 159, 159), tuple(
+            option.checks.right.product_size for option in options
+        ))
+        self.assertEqual((193, 134), options[1].digest.fragments)
+        self.assertEqual((198, 131), options[2].digest.fragments)
+        self.assertEqual((197, 132), options[3].digest.fragments)
+
+        reverse_guide = service.design_gene("bub1").guides[0]
+        reverse_options = service.cassette_options(
+            reverse_guide.chromosome,
+            reverse_guide.cut_coordinates,
+            reverse_guide.seed,
+            1,
+            "-",
+        )
+        self.assertEqual((197, 203, 205, 205), tuple(
+            option.checks.left.product_size for option in reverse_options
+        ))
+        self.assertEqual((123, 123, 123, 123), tuple(
+            option.checks.right.product_size for option in reverse_options
+        ))
+
+        paci_conflict = service.cassette_options(
+            "I",
+            (1799341, 1799342),
+            "CAGCTTCATTGAATTAATTA",
+            1,
+            "+",
+        )
+        self.assertEqual(
+            (True, True, False, True),
+            tuple(option.available for option in paci_conflict),
+        )
+        self.assertEqual(0, len(paci_conflict[2].digest.wt_sites))
+        self.assertEqual(2, len(paci_conflict[2].digest.edited_sites))
+        self.assertEqual(0, len(paci_conflict[3].digest.wt_sites))
+        self.assertEqual(1, len(paci_conflict[3].digest.edited_sites))
+
+        swai_conflict = service.cassette_options(
+            "I",
+            (251790, 251791),
+            "TATATTATTGCATTTAACCT",
+            1,
+            "-",
+        )
+        self.assertEqual(
+            (True, True, False, False),
+            tuple(option.available for option in swai_conflict),
+        )
+        self.assertEqual(0, len(swai_conflict[3].digest.wt_sites))
+        self.assertEqual(2, len(swai_conflict[3].digest.edited_sites))
+        self.assertEqual((151, 143, 6), swai_conflict[3].digest.fragments)
+
+    def test_atg7_primer_fallbacks(self):
+        service = Crispr4pService.from_project_data()
+        result = service.design_gene("atg7")
+        guide = result.guides[8]
+        annotation = service.annotate_guide(guide)
+        choices = service.cassette_choices(
+            (guide,),
+            (annotation,),
+            target_name="atg7",
+        )[0]
+        options = service.cassette_options(
+            guide.chromosome,
+            guide.cut_coordinates,
+            guide.seed,
+            choices[0].id,
+            "-",
+        )
+
+        self.assertEqual("GGCATTTAACAGTGTACCCT", guide.seed)
+        self.assertTrue(all(option.available for option in options))
+        self.assertTrue(all(option.spanning is not None for option in options))
+        self.assertTrue(all(option.checks is not None for option in options))
+        self.assertEqual(328, options[0].spanning.wt_product_size)
+        self.assertTrue(all(
+            option.digest.available for option in options[1:]
+        ))
+
+        wider_pair = service.insertion_primers(
+            result.guides[85].chromosome,
+            result.guides[85].cut_coordinates,
+        )
+        self.assertEqual("CAAGCATTAGGTGAAATTGC", result.guides[85].seed)
+        self.assertEqual(370, wider_pair.wt_product_size)
 
     def test_insertion_primer_endpoint(self):
         service = Mock()
@@ -566,6 +900,86 @@ class DisruptionDesignTests(unittest.TestCase):
                 },
             },
             json.loads(handler.wfile.getvalue()),
+        )
+
+    def test_cassette_options_endpoint(self):
+        pair = InsertionPrimerPair(
+            forward="FORWARD",
+            reverse="REVERSE",
+            forward_tm=59.4,
+            reverse_tm=60.2,
+            wt_product_size=298,
+            insert_length=29,
+        )
+        asci = cassette_format("asci")
+        options = (
+            CassetteOption(
+                cassette_format=NO_DIAGNOSTIC,
+                coding_sequence=FIRST,
+                insert=FIRST,
+                available=True,
+                spanning=pair,
+                checks=None,
+                digest=None,
+            ),
+            CassetteOption(
+                cassette_format=asci,
+                coding_sequence=asci.sequence(self.cassettes[0]),
+                insert=asci.sequence(self.cassettes[0]),
+                available=True,
+                spanning=pair,
+                checks=None,
+                digest=DigestResult(
+                    enzyme="AscI",
+                    site="GGCGCGCC",
+                    wt_sites=(),
+                    edited_sites=(191,),
+                    fragments=(193, 134),
+                ),
+            ),
+        )
+        service = Mock()
+        service.cassette_options.return_value = options
+        handler = webapp.CRISPR4PHandler.__new__(webapp.CRISPR4PHandler)
+        handler.send_response = Mock()
+        handler.send_header = Mock()
+        handler.end_headers = Mock()
+        handler.wfile = BytesIO()
+
+        with patch.object(webapp, "create_service", return_value=service):
+            handler.serve_cassette_options({
+                "chromosome": ["III"],
+                "cut_left": ["1316791"],
+                "cut_right": ["1316792"],
+                "guide": [ADE6_GUIDE],
+                "cassette_id": ["1"],
+                "coding_strand": ["+"],
+            })
+
+        service.cassette_options.assert_called_once_with(
+            "III",
+            (1316791, 1316792),
+            ADE6_GUIDE,
+            1,
+            "+",
+            arm_length=80,
+            window=300,
+        )
+        payload = json.loads(handler.wfile.getvalue())
+        self.assertEqual(("none", "asci"), tuple(
+            row["id"] for row in payload["formats"]
+        ))
+        self.assertEqual([193, 134], payload["formats"][1]["digest"]["fragments"])
+        self.assertEqual(0, payload["formats"][1]["digest"]["wt_site_count"])
+        self.assertTrue(payload["formats"][1]["available"])
+        self.assertIsNone(payload["formats"][0]["product_url"])
+        self.assertIsNone(payload["formats"][0]["protocol_url"])
+        self.assertEqual(
+            webapp.NEB_LINKS["AscI"],
+            (
+                payload["formats"][1]["product_url"],
+                payload["formats"][1]["protocol_url"],
+            ),
         )
 
     def test_minus_strand_donor(self):
@@ -819,13 +1233,13 @@ class DisruptionDesignTests(unittest.TestCase):
             page.count('class="toggle_header project_workflow_header"'),
         )
         self.assertEqual(
-            3,
+            4,
             page.count('class="workflow_section project_workflow"'),
         )
         self.assertEqual(6, page.count('class="toggle_button"'))
         self.assertEqual(1, page.count('aria-expanded="true"'))
         self.assertEqual(5, page.count('aria-expanded="false"'))
-        self.assertEqual(5, page.count('style="display: none;"'))
+        self.assertEqual(8, page.count('style="display: none;"'))
         self.assertIn(
             'aria-expanded="true" aria-controls="primers_table"',
             page,
@@ -869,9 +1283,26 @@ class DisruptionDesignTests(unittest.TestCase):
             "5714741",
         ):
             self.assertIn('href="{}"'.format(reference), page)
-        self.assertEqual(3, page.count('rel="noopener noreferrer"'))
+        self.assertEqual(5, page.count('rel="noopener noreferrer"'))
         self.assertIn("Guide GC:", page)
+        self.assertIn('id="cassette_setup"', page)
         self.assertIn('id="stop_cassette_menu"', page)
+        self.assertIn('id="cassette_format_menu"', page)
+        self.assertIn("Choose a cassette format...", page)
+        self.assertIn("option.disabled = !item.available;", page)
+        self.assertIn("unavailable at this site", page)
+        self.assertIn(
+            'id="stop_cassette_header" '
+            'class="toggle_header project_workflow_header" '
+            'style="display: none;"',
+            page,
+        )
+        self.assertIn(
+            'id="restoration_header" '
+            'class="toggle_header project_workflow_header" '
+            'style="display: none;"',
+            page,
+        )
         self.assertIn("Reading frame 1:", page)
         self.assertIn("Reading frame 3:", page)
         self.assertNotIn("Reading frame 0:", page)
@@ -906,7 +1337,10 @@ class DisruptionDesignTests(unittest.TestCase):
             page.index("Overlap sequence (reverse):"),
             page.index("Overlap length:"),
         )
-        self.assertIn("function hr_oligos(sequence, donor)", page)
+        self.assertIn(
+            "function hr_oligos(sequence, overlap_start, overlap_end)",
+            page,
+        )
         self.assertLess(
             page.index('id="donor_total_length"'),
             page.index("HR-template construction oligos"),
@@ -958,12 +1392,33 @@ class DisruptionDesignTests(unittest.TestCase):
         self.assertIn('id="right_junction_forward"', page)
         self.assertIn("Expected WT product:", page)
         self.assertIn("Expected disrupted product:", page)
-        self.assertIn('fetch("/insertion-primers?"', page)
+        self.assertIn("PCR-RFLP", page)
+        self.assertIn('id="diagnostic_pcr" style="display: none;"', page)
+        self.assertIn("Expected digest fragments:", page)
+        self.assertIn("NEB resources:", page)
+        self.assertIn('id="diagnostic_product_link"', page)
+        self.assertIn('id="diagnostic_protocol_link"', page)
+        self.assertIn(
+            'product_link.href = option.product_url;',
+            page,
+        )
+        self.assertIn(
+            'protocol_link.href = option.protocol_url;',
+            page,
+        )
+        self.assertIn(
+            '"Uncut (" + pair.wt_product_size + " bp)"',
+            page,
+        )
+        self.assertLess(page.index("PCR-RFLP"), details_start)
+        self.assertIn('fetch("/cassette-options?"', page)
+        self.assertIn("guide: rows[index][0]", page)
         self.assertIn("cassette_id: cassette.id", page)
         self.assertIn("coding_strand: annotation.coding_strand", page)
-        self.assertIn("var insertion_primer_cache = {};", page)
+        self.assertIn("var format_cache = {};", page)
         self.assertIn('var key = index + ":" + cassette.id;', page)
-        self.assertIn("update_insertion_primers(guide_number, cassette);", page)
+        self.assertIn("load_formats(index);", page)
+        self.assertNotIn('fetch("/insertion-primers?"', page)
 
         css = (PROJECT_ROOT / "css/crispr4p.css").read_text(encoding="utf-8")
         shell = (PROJECT_ROOT / "template/bahler_template.html").read_text(

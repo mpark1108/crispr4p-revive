@@ -1,6 +1,6 @@
 """Homology sequences and primer3 design."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from primer3 import bindings as primer3
 
@@ -214,11 +214,15 @@ def insertion_primers(
             [0, left_region, right_start, right_region]
         ],
     }
-    global_args = _primer_settings((200, 300))
-    global_args["PRIMER_PICK_INTERNAL_OLIGO"] = 0
-    global_args["PRIMER_NUM_RETURN"] = 1
+    answer = None
+    for product_range in ((200, 300), (301, 350), (351, 400)):
+        global_args = _primer_settings(product_range)
+        global_args["PRIMER_PICK_INTERNAL_OLIGO"] = 0
+        global_args["PRIMER_NUM_RETURN"] = 1
+        answer = primer_designer(sequence_args, global_args)
+        if answer.get("PRIMER_PAIR_NUM_RETURNED", 0) >= 1:
+            break
 
-    answer = primer_designer(sequence_args, global_args)
     if answer.get("PRIMER_PAIR_NUM_RETURNED", 0) < 1:
         raise PrimerNotFoundError("Primer3 could not find a checking pair")
 
@@ -243,20 +247,30 @@ def insertion_checks(
     arm_length=80,
     window=300,
     primer_designer=design_primers,
+    core=None,
+    spanning=None,
 ):
     """Check the edit-spanning and cassette-junction PCR pairs."""
     insert = str(insert).upper()
     if not insert or set(insert) - set("ACGT"):
         raise ValueError("insert must contain only A, C, G, and T")
+    core = insert if core is None else str(core).upper()
+    if not core or set(core) - set("ACGT"):
+        raise ValueError("cassette core must contain only A, C, G, and T")
+    if insert.count(core) != 1:
+        raise ValueError("insert must contain the cassette core once")
 
-    spanning = insertion_primers(
-        reference,
-        cut,
-        arm_length=arm_length,
-        window=window,
-        insert_length=len(insert),
-        primer_designer=primer_designer,
-    )
+    if spanning is None:
+        spanning = insertion_primers(
+            reference,
+            cut,
+            arm_length=arm_length,
+            window=window,
+            insert_length=len(insert),
+            primer_designer=primer_designer,
+        )
+    else:
+        spanning = replace(spanning, insert_length=len(insert))
     if spanning.forward_start is None or spanning.reverse_end is None:
         raise PrimerNotFoundError("Primer3 did not return primer positions")
 
@@ -266,19 +280,27 @@ def insertion_checks(
     right = reference[cut_left:min(len(reference), cut_left + window)]
     template = left + insert + right
     junction = len(left)
+    core_start = insert.index(core)
+    core_end = core_start + len(core)
 
-    left_size = junction + len(insert) - spanning.forward_start
-    right_size = spanning.reverse_end + len(insert) - junction + 1
+    left_size = junction + core_end - spanning.forward_start
+    right_size = (
+        spanning.reverse_end
+        + len(insert)
+        - junction
+        - core_start
+        + 1
+    )
     left_pair = _check_pair(
         template,
         spanning.forward,
-        reverse_complement(insert),
+        reverse_complement(core),
         left_size,
         primer_designer,
     )
     right_pair = _check_pair(
         template,
-        insert,
+        core,
         spanning.reverse,
         right_size,
         primer_designer,
