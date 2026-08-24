@@ -9,7 +9,7 @@ CRISPR4P Revive is a Python 3 modernization and extension of the original CRISPR
 - Report PAM coordinates, Cas9 cut position, genomic region, CDS position, overlapping genes, and gene viability
 - Generate the original CRISPR4P deletion-design primers
 - Generate 52-nt SpEDIT/pLSB Golden Gate cloning oligos
-- Generate disruption donors using a packaged set of 23-nt stop-cassette candidates
+- Generate disruption donors using a packaged set of 23-nt stop-cassette candidates with optional diagnostic sites (AscI, PacI, or SwaI).
 - Generate wild-type restoration donors and rescue-guide cloning oligos
 - Design edit-spanning and optional junction-checking PCR primers
 
