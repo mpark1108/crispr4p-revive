@@ -1,7 +1,21 @@
 # PomBase annotation snapshots
 
-CRISPR4P ships fixed copies of two PomBase datasets so cut-site annotation is
-reproducible and works from a fresh clone without network access.
+CRISPR4P ships fixed PomBase datasets so name lookup and cut-site annotation
+are reproducible and work from a fresh clone without network access.
+
+## Gene names and synonyms
+
+- File: `gene_IDs_names.tsv`
+- Purpose: current systematic IDs, primary gene names, and searchable synonyms
+- PomBase source directory:
+  <https://www.pombase.org/data/names_and_identifiers/>
+- Embedded Chado database date: 2026-08-24 20:37
+- SHA-256:
+  `4c688312ebb5ab80356cf60c0b85ad9f409d049e5688c0915e477de60cde4899`
+
+The smaller names-only table is packaged instead of
+`gene_IDs_names_products.tsv` because both contain the same name and synonym
+fields and CRISPR4P does not currently display gene-product descriptions.
 
 ## Genome feature annotations
 
@@ -26,6 +40,7 @@ reproducible and works from a fresh clone without network access.
 The viability file contains the raw states `viable`, `inviable`,
 `condition-dependent`, and `unknown`.
 
-The upstream files do not embed an exact PomBase release identifier. The
-timestamps above are those of the reviewed local copies, and the hashes are
-the authoritative identifiers for the snapshots used by this project.
+The GFF3 and viability files do not embed an exact PomBase release identifier.
+Their timestamps are those of the reviewed local copies. The gene-names table
+does embed its Chado database date. The hashes are the authoritative
+identifiers for every snapshot used by this project.

@@ -2,9 +2,10 @@ import hashlib
 import unittest
 from pathlib import Path
 
-from crispr4p.annotations import GenomeAnnotations
+from crispr4p.annotations import AmbiguousGeneNameError, GenomeAnnotations
 from crispr4p.models import DesignResult, OligoAnalysisResult, OligoMatch
 from crispr4p.web_views import (
+    render_ambiguous_gene_error,
     render_design,
     render_error,
     render_gene_error,
@@ -47,6 +48,18 @@ class TestErrorViews(unittest.TestCase):
             'systematic gene ID, such as SPBPB2B2.01.</h3></font>',
             result,
         )
+        self.assertNotIn("ERROR during execution", result)
+
+    def test_ambiguous_gene_name_lists_ids_and_escapes_input(self) -> None:
+        error = AmbiguousGeneNameError(
+            '<shared "name">',
+            ("SPAC1", "SPBC2"),
+        )
+
+        result = render_ambiguous_gene_error(error)
+
+        self.assertIn("&lt;shared &quot;name&quot;&gt;", result)
+        self.assertIn("SPAC1, SPBC2", result)
         self.assertNotIn("ERROR during execution", result)
 
     def test_oligo_length_error_is_unchanged(self) -> None:

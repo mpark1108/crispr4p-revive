@@ -4,7 +4,12 @@ import unittest
 from dataclasses import FrozenInstanceError
 from pathlib import Path
 
-from crispr4p.annotations import GenomeAnnotations, read_viability
+from crispr4p.annotations import (
+    AmbiguousGeneNameError,
+    GeneNames,
+    GenomeAnnotations,
+    read_viability,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +17,7 @@ PROJECT_GFF = (
     PROJECT_ROOT / "data" / "Schizosaccharomyces_pombe_all_chromosomes.gff3"
 )
 PROJECT_VIABILITY = PROJECT_ROOT / "data" / "gene_viability.tsv"
+PROJECT_NAMES = PROJECT_ROOT / "data" / "gene_IDs_names.tsv"
 
 
 GFF = """\
@@ -41,6 +47,73 @@ plus\tviable
 minus\tinviable
 antisense\tcondition-dependent
 """
+
+NAMES = """\
+# Chado database date: test
+gene_systematic_id\tgene_name\tsynonyms
+plus\tplus_gene\tplus_alias,shared
+minus\tminus_gene\tminus_alias,shared,plus,plus_gene
+antisense\t\told_antisense
+"""
+
+
+class GeneNamesTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.temporary_directory = tempfile.TemporaryDirectory()
+        cls.names_path = Path(cls.temporary_directory.name) / "gene_names.tsv"
+        cls.names_path.write_text(NAMES, encoding="utf-8")
+        cls.names = GeneNames.from_file(cls.names_path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.temporary_directory.cleanup()
+
+    def test_resolves_ids_names_and_comma_separated_synonyms(self):
+        by_id = self.names.find(" PLUS ")
+        by_name = self.names.find("PLUS_GENE")
+        by_alias = self.names.find("plus_alias")
+
+        self.assertIs(by_id, by_name)
+        self.assertIs(by_name, by_alias)
+        self.assertEqual("plus", by_alias.gene_id)
+        self.assertEqual("plus_gene", by_alias.name)
+        self.assertEqual(("plus_alias", "shared"), by_alias.synonyms)
+        self.assertFalse(by_alias.is_alias("plus_gene"))
+        self.assertTrue(by_alias.is_alias("plus_alias"))
+        self.assertIsNone(self.names.find("missing"))
+
+    def test_reports_ambiguous_names_with_systematic_ids(self):
+        with self.assertRaises(AmbiguousGeneNameError) as raised:
+            self.names.find("shared")
+
+        self.assertEqual("shared", raised.exception.query)
+        self.assertEqual(("plus", "minus"), raised.exception.gene_ids)
+        self.assertIn("plus, minus", str(raised.exception))
+
+    def test_rejects_malformed_and_duplicate_rows(self):
+        cases = (
+            ("wrong\theader\n", "header"),
+            (
+                "gene_systematic_id\tgene_name\tsynonyms\n"
+                "plus\tplus_gene\n",
+                "three columns",
+            ),
+            (
+                "gene_systematic_id\tgene_name\tsynonyms\n"
+                "plus\tplus_gene\t\nplus\tother\t\n",
+                "duplicate",
+            ),
+        )
+        for text, message in cases:
+            with self.subTest(message=message):
+                with tempfile.NamedTemporaryFile(
+                    "w", encoding="utf-8"
+                ) as handle:
+                    handle.write(text)
+                    handle.flush()
+                    with self.assertRaisesRegex(ValueError, message):
+                        GeneNames.from_file(handle.name)
 
 
 class GenomeAnnotationsTests(unittest.TestCase):
@@ -265,6 +338,7 @@ class PackagedPomBaseDataTests(unittest.TestCase):
             PROJECT_GFF,
             PROJECT_VIABILITY,
         )
+        cls.names = GeneNames.from_file(PROJECT_NAMES)
 
     def test_reviewed_dataset_snapshots_are_packaged_unchanged(self):
         expected = {
@@ -273,6 +347,9 @@ class PackagedPomBaseDataTests(unittest.TestCase):
             ),
             PROJECT_VIABILITY: (
                 "e9399024327be0a2a6618c8fda1dfaef6ef72c493eb1050c7a6d86d41a3d3d09"
+            ),
+            PROJECT_NAMES: (
+                "4c688312ebb5ab80356cf60c0b85ad9f409d049e5688c0915e477de60cde4899"
             ),
         }
         for path, expected_hash in expected.items():
@@ -284,6 +361,30 @@ class PackagedPomBaseDataTests(unittest.TestCase):
                 )
 
         self.assertEqual(12685, len(self.annotations.viability))
+        self.assertEqual(12689, len(self.names))
+
+    def test_current_synonym_resolves_orb2_to_shk1(self):
+        gene = self.names.find(" ORB2 ")
+
+        self.assertEqual("SPBC1604.14c", gene.gene_id)
+        self.assertEqual("shk1", gene.name)
+        self.assertEqual(("pak1", "orb2"), gene.synonyms)
+
+    def test_current_names_precede_ambiguous_historical_aliases(self):
+        self.assertEqual("SPAC9E9.12c", self.names.find("abc1").gene_id)
+
+    def test_current_ambiguous_alias_lists_both_gene_ids(self):
+        with self.assertRaises(AmbiguousGeneNameError) as raised:
+            self.names.find("noc2")
+
+        self.assertEqual(
+            ("SPAC1142.04", "SPAC1B3.09c"),
+            raised.exception.gene_ids,
+        )
+        self.assertEqual(
+            "SPNCRNA.2001",
+            self.names.find("SPNCRNA.2001").gene_id,
+        )
 
     def test_real_ade6_cut_matches_reviewed_prototype(self):
         result = self.annotations.annotate_cut(

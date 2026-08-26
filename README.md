@@ -48,7 +48,7 @@ Then open [http://localhost:8080](http://localhost:8080).
 
 ## Reference data
 
-The repository includes the *S. pombe* ASM294v2.26 reference genome and packaged PomBase annotation and gene-viability snapshots. Additional info in [`data/POMBASE_DATA.md`](data/POMBASE_DATA.md).
+The repository includes the *S. pombe* ASM294v2.26 reference genome and packaged PomBase gene-name, annotation, and gene-viability snapshots. Additional info in [`data/POMBASE_DATA.md`](data/POMBASE_DATA.md).
 
 ## Testing
 

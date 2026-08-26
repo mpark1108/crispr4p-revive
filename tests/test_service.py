@@ -167,6 +167,57 @@ class TestCrispr4pService(unittest.TestCase):
         )
         self.assertIs(LEGACY_RESULT[0], result.guide_table)
 
+    def test_current_synonym_uses_systematic_id_and_primary_name(self) -> None:
+        gene = SimpleNamespace(
+            gene_id="SPBC1604.14c",
+            name="shk1",
+            is_alias=lambda query: query.strip().casefold() == "orb2",
+        )
+        names = SimpleNamespace(find=lambda query: gene)
+        service = Crispr4pService(
+            "genome.fa",
+            "coordinates.txt",
+            "synonyms.txt",
+            designer_factory=RecordingDesigner,
+            gene_names=names,
+        )
+
+        result = service.design_gene("orb2", n_mismatch=2)
+
+        self.assertEqual("shk1", result.name)
+        self.assertEqual(1, len(RecordingDesigner.instances))
+        self.assertEqual(
+            "SPBC1604.14c",
+            RecordingDesigner.instances[0].run_web_calls[0]["name"],
+        )
+        self.assertEqual(
+            2,
+            RecordingDesigner.instances[0].run_web_calls[0]["nMismatch"],
+        )
+
+    def test_current_name_table_loads_once(self) -> None:
+        calls = []
+        names = SimpleNamespace(find=lambda query: None)
+
+        def load_names(path):
+            calls.append(path)
+            return names
+
+        service = Crispr4pService(
+            "genome.fa",
+            "coordinates.txt",
+            "synonyms.txt",
+            designer_factory=RecordingDesigner,
+            gene_names_file="gene_names.tsv",
+            gene_names_factory=load_names,
+        )
+
+        service.design_gene("ade6")
+        service.design_gene("ura4")
+
+        self.assertEqual(["gene_names.tsv"], calls)
+        self.assertIs(names, service.gene_names)
+
     def test_gff_only_gene_uses_its_interval(self) -> None:
         annotation_index = SimpleNamespace(
             find_gene=lambda name: SimpleNamespace(
@@ -458,9 +509,15 @@ class TestCrispr4pService(unittest.TestCase):
             "gene_viability.tsv",
             Path(service.gene_viability_file).name,
         )
+        self.assertEqual(
+            "gene_IDs_names.tsv",
+            Path(service.gene_names_file).name,
+        )
         self.assertTrue(Path(service.annotation_gff_file).is_file())
         self.assertTrue(Path(service.gene_viability_file).is_file())
+        self.assertTrue(Path(service.gene_names_file).is_file())
         self.assertIsNone(service.genome_annotations)
+        self.assertIsNotNone(service.gene_names)
 
 
 if __name__ == "__main__":

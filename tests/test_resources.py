@@ -98,6 +98,14 @@ class TestReferenceResources(unittest.TestCase):
         coordinates = annotations.getCoordsFromName("  ADE6  ")
         self.assertIsInstance(coordinates, list)
         self.assertEqual(["III", "1316337", "1317995", "1"], coordinates)
+        self.assertEqual(
+            ["II", "3905082", "3907058", "1"],
+            annotations.getCoordsFromName("orb2"),
+        )
+        self.assertEqual(
+            ["II", "3905082", "3907058", "1"],
+            annotations.getCoordsFromName("spbc1604.14C"),
+        )
 
         coordinate_rows = annotations.readCoordinates_(COORDINATES)
         synonym_rows = annotations.readSynonims_(SYNONIMS)

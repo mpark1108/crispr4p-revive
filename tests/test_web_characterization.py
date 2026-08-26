@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import webapp
-from crispr4p.annotations import GenomeAnnotations
+from crispr4p.annotations import AmbiguousGeneNameError, GenomeAnnotations
 from crispr4p.models import DesignResult, OligoAnalysisResult, OligoMatch
 from crispr4p.resources import GeneNameNotFoundError
 from crispr4p.service import OligoLengthError
@@ -256,6 +256,20 @@ class TestHttpPostCharacterization(unittest.TestCase):
         result = handler.serve_form.call_args.args[0]
         self.assertIn('Gene &quot;missing&quot; was not found.', result)
         self.assertIn("try a PomBase systematic gene ID", result)
+        self.assertNotIn("ERROR during execution", result)
+
+    def test_ambiguous_gene_gets_systematic_id_choices(self) -> None:
+        handler = self.make_post_handler({"name": "noc2"})
+        handler.run_design_model.side_effect = AmbiguousGeneNameError(
+            "noc2",
+            ("SPAC1142.04", "SPAC1B3.09c"),
+        )
+
+        handler.process_post()
+
+        result = handler.serve_form.call_args.args[0]
+        self.assertIn("Gene name &quot;noc2&quot; is ambiguous.", result)
+        self.assertIn("SPAC1142.04, SPAC1B3.09c", result)
         self.assertNotIn("ERROR during execution", result)
 
     def test_coordinate_query_is_trimmed_and_forwarded(self) -> None:

@@ -179,6 +179,41 @@ class TestServiceIntegration(unittest.TestCase):
         self.assertIn('"gene_id":"SPBPB2B2.01"', html)
         self.assertIn('"role":"Primary target"', html)
 
+    def test_real_orb2_synonym_resolves_shk1_design(self) -> None:
+        by_synonym = self.service.design_gene("orb2")
+        by_name = self.service.design_gene("shk1")
+        by_id = self.service.design_gene("SPBC1604.14c")
+        annotations = self.service.annotate_guides(by_synonym.guides)
+        choices = self.service.cassette_choices(
+            by_synonym.guides,
+            annotations,
+            by_synonym.name,
+        )
+        rows = annotation_rows(
+            by_synonym.guides,
+            annotations,
+            by_synonym.name,
+        )
+
+        self.assertEqual("shk1", by_synonym.name)
+        self.assertEqual(
+            ("II", "3905082", "3907058"),
+            (by_synonym.chromosome, by_synonym.start, by_synonym.end),
+        )
+        self.assertEqual(by_id.guide_table, by_synonym.guide_table)
+        self.assertEqual(by_name.guide_table, by_synonym.guide_table)
+        self.assertEqual(by_name.hr_dna, by_synonym.hr_dna)
+        self.assertEqual(by_name.checking_primers, by_synonym.checking_primers)
+        first_genes = {
+            gene["gene_id"]: gene for gene in rows[0]["genes"]
+        }
+        self.assertEqual(
+            "Primary target",
+            first_genes["SPBC1604.14c"]["role"],
+        )
+        self.assertTrue(rows[0]["coding_target"])
+        self.assertTrue(choices[0])
+
     def test_gff_only_gene_design_uses_current_interval(self) -> None:
         result = self.service.design_gene("SPNCRNA.7311")
         annotations = self.service.annotate_guides(result.guides)

@@ -13,6 +13,15 @@ class GeneNameNotFoundError(LookupError):
         super().__init__(f'Gene "{query}" was not found')
 
 
+def _matches_name(row, name):
+    # The legacy third column can contain several comma-separated synonyms.
+    return any(
+        name == synonym.strip()
+        for value in row
+        for synonym in value.split(",")
+    )
+
+
 @dataclass(frozen=True, slots=True, init=False, eq=False)
 class chromosomeFasta:
     """One FASTA record."""
@@ -87,17 +96,21 @@ class AnnotationParser:
         return [[value for value in row if value] for row in rows]
 
     def normalize_name(self, name):
-        name = name.upper().strip()
-        if not any(row[0] == name for row in self.coordinates_):
-            name = name.lower()
-        return name
+        name = name.strip()
+        normalized = name.casefold()
+        for row in self.coordinates_:
+            if row[0].casefold() == normalized:
+                return row[0]
+        return name.lower()
 
     def getCoordsFromName(self, name):
         input_name = name
         name = self.normalize_name(name)
 
         try:
-            found = next(row for row in self.synonims_ if name in row)[0]
+            found = next(
+                row for row in self.synonims_ if _matches_name(row, name)
+            )[0]
         except StopIteration:
             raise GeneNameNotFoundError(input_name)
 

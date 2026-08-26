@@ -9,6 +9,7 @@ from functools import lru_cache
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from crispr4p.service import (
+    AmbiguousGeneNameError,
     Crispr4pService,
     GeneNameNotFoundError,
     OligoLengthError,
@@ -16,6 +17,7 @@ from crispr4p.service import (
 )
 from crispr4p.web_views import (
     render_design,
+    render_ambiguous_gene_error,
     render_error,
     render_gene_error,
     render_oligo,
@@ -290,6 +292,8 @@ class CRISPR4PHandler(BaseHTTPRequestHandler):
                 result_html = render_query_error()
         except GeneNameNotFoundError as error:
             result_html = render_gene_error(error.query)
+        except AmbiguousGeneNameError as error:
+            result_html = render_ambiguous_gene_error(error)
         except Exception as e:
             result_html = render_error(e)
 

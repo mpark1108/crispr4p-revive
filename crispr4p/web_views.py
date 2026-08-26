@@ -393,6 +393,11 @@ def render_gene_error(query):
     )
 
 
+def render_ambiguous_gene_error(error):
+    message = html.escape(str(error), quote=True)
+    return f'<font color="red"><h3>{message}</h3></font>'
+
+
 def render_oligo_error(sequence_length):
     return (
         '<font color="red"><h3>Error: Oligo sequence must be 20 bp '

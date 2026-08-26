@@ -27,6 +27,144 @@ VIABILITY_LABELS = MappingProxyType(
 )
 
 
+class AmbiguousGeneNameError(ValueError):
+    """Raised when a name maps to more than one PomBase gene."""
+
+    def __init__(self, query, gene_ids):
+        self.query = query
+        self.gene_ids = tuple(gene_ids)
+        matches = ", ".join(self.gene_ids)
+        super().__init__(
+            f'Gene name "{query}" is ambiguous. Try one of these PomBase '
+            f"systematic IDs: {matches}."
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class GeneName:
+    """PomBase gene name and synonyms."""
+
+    gene_id: str
+    name: str | None
+    synonyms: tuple[str, ...]
+
+    def is_alias(self, query):
+        normalized = str(query).strip().casefold()
+        primary_names = {self.gene_id.casefold()}
+        if self.name:
+            primary_names.add(self.name.casefold())
+        return normalized not in primary_names
+
+
+def read_gene_names(path):
+    """Read the PomBase gene names and identifiers table."""
+    records = []
+    seen_ids = set()
+    header_found = False
+    expected_header = ("gene_systematic_id", "gene_name", "synonyms")
+
+    with open(path, encoding="utf-8-sig") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip() or line.startswith("#"):
+                continue
+            columns = tuple(line.rstrip("\r\n").split("\t"))
+            if not header_found:
+                if columns != expected_header:
+                    raise ValueError("unexpected PomBase gene names header")
+                header_found = True
+                continue
+            if len(columns) != 3:
+                raise ValueError(
+                    f"gene names line {line_number} must contain three columns"
+                )
+
+            gene_id, name, synonym_text = columns
+            if not gene_id:
+                raise ValueError(f"gene names line {line_number} has no gene ID")
+            if gene_id in seen_ids:
+                raise ValueError(f"duplicate gene names ID {gene_id!r}")
+            seen_ids.add(gene_id)
+            synonyms = tuple(
+                synonym.strip()
+                for synonym in synonym_text.split(",")
+                if synonym.strip()
+            )
+            records.append(GeneName(gene_id, name or None, synonyms))
+
+    if not header_found:
+        raise ValueError("PomBase gene names header was not found")
+    return tuple(records)
+
+
+@dataclass(frozen=True, slots=True, init=False, eq=False)
+class GeneNames:
+    """Read-only case-insensitive PomBase name index."""
+
+    records: tuple[GeneName, ...]
+    _by_id: object
+    _by_primary: object
+    _by_name: object
+
+    def __init__(self, records):
+        records = tuple(records)
+        by_id = {
+            record.gene_id.casefold(): record
+            for record in records
+        }
+        by_primary = {}
+        by_name = {}
+        for record in records:
+            if record.name:
+                key = record.name.casefold()
+                if key in by_primary:
+                    raise ValueError(f"duplicate primary gene name {record.name!r}")
+                by_primary[key] = record
+            for identifier in (record.gene_id, record.name, *record.synonyms):
+                if not identifier:
+                    continue
+                matches = by_name.setdefault(identifier.casefold(), {})
+                matches[record.gene_id] = record
+
+        object.__setattr__(self, "records", records)
+        object.__setattr__(self, "_by_id", MappingProxyType(by_id))
+        object.__setattr__(self, "_by_primary", MappingProxyType(by_primary))
+        object.__setattr__(
+            self,
+            "_by_name",
+            MappingProxyType(
+                {
+                    name: tuple(matches.values())
+                    for name, matches in by_name.items()
+                }
+            ),
+        )
+
+    @classmethod
+    def from_file(cls, path):
+        return cls(read_gene_names(path))
+
+    def find(self, name):
+        normalized = str(name).strip().casefold()
+        gene = self._by_id.get(normalized)
+        if gene is not None:
+            return gene
+        gene = self._by_primary.get(normalized)
+        if gene is not None:
+            return gene
+        matches = self._by_name.get(normalized, ())
+        if not matches:
+            return None
+        if len(matches) > 1:
+            raise AmbiguousGeneNameError(
+                name,
+                (match.gene_id for match in matches),
+            )
+        return matches[0]
+
+    def __len__(self):
+        return len(self.records)
+
+
 def parse_attrs(text):
     """Parse a GFF3 attribute column."""
     attributes = {}

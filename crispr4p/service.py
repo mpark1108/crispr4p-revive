@@ -4,7 +4,7 @@ import os
 from dataclasses import replace
 from pathlib import Path
 
-from .annotations import GenomeAnnotations
+from .annotations import AmbiguousGeneNameError, GeneNames, GenomeAnnotations
 from .crispr4p import NGG, PrimerDesign
 from .diagnostics import CassetteOption, pcr_rflp
 from .disruption import (
@@ -71,6 +71,9 @@ class Crispr4pService:
         annotation_factory=GenomeAnnotations.from_files,
         cassette_file=None,
         cassettes=None,
+        gene_names_file=None,
+        gene_names=None,
+        gene_names_factory=GeneNames.from_file,
     ):
         self.sequence_file = os.fspath(sequence_file)
         self.coordinates_file = os.fspath(coordinates_file)
@@ -92,6 +95,11 @@ class Crispr4pService:
         )
         self._genome_annotations = genome_annotations
         self._annotation_factory = annotation_factory
+        self.gene_names_file = (
+            os.fspath(gene_names_file) if gene_names_file is not None else None
+        )
+        self._gene_names = gene_names
+        self._gene_names_factory = gene_names_factory
         self.cassette_file = (
             os.fspath(cassette_file) if cassette_file is not None else None
         )
@@ -108,6 +116,8 @@ class Crispr4pService:
         genome_annotations=None,
         annotation_factory=GenomeAnnotations.from_files,
         cassettes=None,
+        gene_names=None,
+        gene_names_factory=GeneNames.from_file,
     ):
         """Use the reference files included with CRISPR4P."""
         return cls(
@@ -129,15 +139,35 @@ class Crispr4pService:
             ),
             genome_annotations=genome_annotations,
             annotation_factory=annotation_factory,
+            gene_names_file=PROJECT_DATA_DIRECTORY / "gene_IDs_names.tsv",
+            gene_names=gene_names,
+            gene_names_factory=gene_names_factory,
             cassette_file=PROJECT_DATA_DIRECTORY / "stop_cassettes.json",
             cassettes=cassettes,
         )
 
     def design_gene(self, name, n_mismatch=0):
         """Design for a gene name or systematic ID."""
+        named_gene = self._find_gene_name(name)
+        if named_gene is not None and named_gene.is_alias(name):
+            return self._design_gene_id(
+                named_gene.gene_id,
+                named_gene.name,
+                name,
+                n_mismatch,
+            )
+
         try:
             return self._run(name=name, n_mismatch=n_mismatch)
         except GeneNameNotFoundError as legacy_error:
+            if named_gene is not None:
+                return self._design_gene_id(
+                    named_gene.gene_id,
+                    named_gene.name,
+                    name,
+                    n_mismatch,
+                    legacy_error,
+                )
             if (
                 self._genome_annotations is None
                 and self.annotation_gff_file is None
@@ -147,25 +177,13 @@ class Crispr4pService:
             gene = self._load_annotations().find_gene(name)
             if gene is None:
                 raise legacy_error from None
-
-            try:
-                result = self._run(
-                    name=gene.gene_id,
-                    n_mismatch=n_mismatch,
-                )
-            except GeneNameNotFoundError:
-                if gene.chromosome is None:
-                    raise legacy_error from None
-                result = self._run(
-                    chromosome=gene.chromosome,
-                    start=str(gene.start),
-                    end=str(gene.end),
-                    n_mismatch=n_mismatch,
-                )
-
-            return self._with_name(
-                result,
-                gene.name or gene.gene_id,
+            return self._design_gene_id(
+                gene.gene_id,
+                gene.name,
+                name,
+                n_mismatch,
+                legacy_error,
+                annotation=gene,
             )
 
     def design_region(
@@ -594,6 +612,53 @@ class Crispr4pService:
     def genome_annotations(self):
         """Return the annotation index after it has been loaded."""
         return self._genome_annotations
+
+    @property
+    def gene_names(self):
+        """Return the PomBase name index after it has been loaded."""
+        return self._gene_names
+
+    def _find_gene_name(self, name):
+        names = self._load_gene_names()
+        return names.find(name) if names is not None else None
+
+    def _design_gene_id(
+        self,
+        gene_id,
+        display_name,
+        query,
+        n_mismatch,
+        lookup_error=None,
+        annotation=None,
+    ):
+        lookup_error = lookup_error or GeneNameNotFoundError(query)
+        try:
+            result = self._run(name=gene_id, n_mismatch=n_mismatch)
+        except GeneNameNotFoundError:
+            if annotation is None:
+                if (
+                    self._genome_annotations is None
+                    and self.annotation_gff_file is None
+                ):
+                    raise lookup_error from None
+                annotation = self._load_annotations().find_gene(gene_id)
+            if annotation is None or annotation.chromosome is None:
+                raise lookup_error from None
+            result = self._run(
+                chromosome=annotation.chromosome,
+                start=str(annotation.start),
+                end=str(annotation.end),
+                n_mismatch=n_mismatch,
+            )
+        return self._with_name(result, display_name or gene_id)
+
+    def _load_gene_names(self):
+        if self._gene_names is not None:
+            return self._gene_names
+        if self.gene_names_file is None:
+            return None
+        self._gene_names = self._gene_names_factory(self.gene_names_file)
+        return self._gene_names
 
     def _load_annotations(self):
         if self._genome_annotations is not None:
