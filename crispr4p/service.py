@@ -14,6 +14,7 @@ from .disruption import (
     recut_sites,
     target_gene,
     target_strand,
+    valid_rescue_site,
 )
 from .guides import match_guide
 from .models import DesignResult, OligoAnalysisResult, OligoMatch
@@ -442,6 +443,13 @@ class Crispr4pService:
                 coding_strand,
                 cassette_format=item,
             )
+            rescue_ok = valid_rescue_site(
+                reference,
+                cut_coordinates,
+                cassette,
+                coding_strand,
+                cassette_format=item,
+            )
             pair = (
                 replace(base_pair, insert_length=len(insert))
                 if base_pair is not None
@@ -473,7 +481,7 @@ class Crispr4pService:
                     window=window,
                 )
 
-            available = not recut
+            available = not recut and rescue_ok
             if item.enzyme is not None:
                 available = (
                     available

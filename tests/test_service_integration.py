@@ -79,6 +79,29 @@ class TestServiceIntegration(unittest.TestCase):
             guide.to_legacy(),
         )
 
+    def test_orb6_without_deletion_primers_still_renders(self) -> None:
+        with tempfile.TemporaryDirectory() as cache:
+            service = Crispr4pService.from_project_data(
+                precomputed_folder=cache,
+            )
+            result = service.design_gene("orb6")
+            annotations = service.annotate_guides(result.guides)
+
+        template = (
+            PROJECT_ROOT / "template" / "container_table.html"
+        ).read_text(encoding="utf-8")
+        page = render_design(result, annotations, template)
+        start = page.index("<h5>Deletion-checking primers</h5>")
+        end = page.index("<h3", start)
+        primer_section = page[start:end]
+
+        self.assertEqual(128, len(result.guides))
+        self.assertEqual([], result.checking_primers)
+        self.assertIn('<div class="r_field">-</div>', primer_section)
+        self.assertIn("- &deg;C", primer_section)
+        self.assertNotIn("5'---3'", primer_section)
+        self.assertNotIn("0 &deg;C", primer_section)
+
     def test_real_ade6_guide_annotation_uses_shared_packaged_index(self) -> None:
         first_guide = self.design_result.guides[0]
 

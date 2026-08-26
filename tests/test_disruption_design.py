@@ -17,6 +17,7 @@ from crispr4p.diagnostics import (
 from crispr4p.disruption import (
     CASSETTE_FORMATS,
     NO_DIAGNOSTIC,
+    CassetteFormat,
     StopCassette,
     build_donor,
     cassette_format,
@@ -25,6 +26,7 @@ from crispr4p.disruption import (
     recut_sites,
     target_gene,
     target_strand,
+    valid_rescue_site,
 )
 from crispr4p.models import DesignResult
 from crispr4p.primers import (
@@ -248,6 +250,34 @@ class DisruptionDesignTests(unittest.TestCase):
                 (1316791, 1316792),
                 ADE6_GUIDE,
                 self.cassettes[0],
+            )
+        )
+
+    def test_rescue_site_is_unique(self):
+        cassette = self.cassettes[0]
+        cut = (1316791, 1316792)
+
+        self.assertTrue(
+            valid_rescue_site(self.reference, cut, cassette, "+")
+        )
+        self.assertTrue(
+            valid_rescue_site(self.reference, cut, cassette, "-")
+        )
+
+        guide = list(cassette.guide)
+        guide[0] = "A" if guide[0] != "A" else "C"
+        extra_target = CassetteFormat(
+            "extra",
+            "extra rescue target",
+            tail="".join(guide) + cassette.pam,
+        )
+        self.assertFalse(
+            valid_rescue_site(
+                self.reference,
+                cut,
+                cassette,
+                "+",
+                cassette_format=extra_target,
             )
         )
 
@@ -1067,6 +1097,26 @@ class DisruptionDesignTests(unittest.TestCase):
         self.assertEqual((self.cassettes,), choices)
         self.assertEqual(10, len(donors[0]))
         self.assertEqual(183, donors[0][0].total_length)
+
+    def test_format_filters_extra_rescue_sites(self):
+        service = Crispr4pService.from_project_data()
+        result = service.design_gene("ade6")
+        guide = result.guides[0]
+
+        with patch(
+            "crispr4p.service.valid_rescue_site",
+            return_value=False,
+        ) as rescue_check:
+            options = service.cassette_options(
+                guide.chromosome,
+                guide.cut_coordinates,
+                guide.seed,
+                1,
+                "+",
+            )
+
+        self.assertTrue(all(not option.available for option in options))
+        self.assertEqual(len(CASSETTE_FORMATS), rescue_check.call_count)
 
     def test_noncoding_target(self):
         service = Crispr4pService.from_project_data()

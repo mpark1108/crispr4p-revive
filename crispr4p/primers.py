@@ -341,12 +341,16 @@ def checking_primers(
         "PRIMER_RIGHT_%s_TM",
     )
 
+    returned = primer3_result.get(
+        "PRIMER_PAIR_NUM_RETURNED",
+        number_of_alternatives,
+    )
     alternatives = []
-    for index in range(number_of_alternatives):
-        alternative = {}
-        for key_template in result_keys:
-            key = key_template % index
-            alternative[key] = primer3_result[key]
+    for index in range(min(number_of_alternatives, returned)):
+        keys = tuple(template % index for template in result_keys)
+        if any(key not in primer3_result for key in keys):
+            break
+        alternative = {key: primer3_result[key] for key in keys}
         alternative["negative_result"] = (
             primer3_result["PRIMER_PAIR_%s_PRODUCT_SIZE" % index]
             + (end - start)

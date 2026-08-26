@@ -122,6 +122,32 @@ class TestPrimerComputations(unittest.TestCase):
             result,
         )
 
+    def test_uses_only_returned_checking_pairs(self):
+        one_pair = primer3_answer()
+        one_pair["PRIMER_PAIR_NUM_RETURNED"] = 1
+        no_pairs = {"PRIMER_PAIR_NUM_RETURNED": 0}
+
+        first = checking_primers(
+            SEQUENCE,
+            START,
+            END,
+            WIDTH,
+            number_of_alternatives=2,
+            primer_designer=Mock(return_value=one_pair),
+        )
+        empty = checking_primers(
+            SEQUENCE,
+            START,
+            END,
+            WIDTH,
+            number_of_alternatives=2,
+            primer_designer=Mock(return_value=no_pairs),
+        )
+
+        self.assertEqual(1, len(first))
+        self.assertEqual("L0", first[0]["PRIMER_LEFT_0_SEQUENCE"])
+        self.assertEqual([], empty)
+
     def test_primer_design_methods_remain_legacy_adapters(self):
         chromosome = chromosomeFasta("synthetic description\n" + SEQUENCE)
         designer = PrimerDesign.__new__(PrimerDesign)

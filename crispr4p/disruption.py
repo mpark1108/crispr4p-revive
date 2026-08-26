@@ -312,7 +312,7 @@ def _recut_sites(window, insert_start, insert_end, guide, cassette_strand,
 
 def recut_sites(reference, cut, guide, cassette, coding_strand=None,
                 max_mismatches=4, cassette_format=NO_DIAGNOSTIC):
-    """Find NGG/NAG junction targets similar to the first guide."""
+    """Find NGG/NAG junction targets similar to a guide."""
     reference = reference.upper()
     guide = guide.upper()
     cut_left = _cut_index(reference, cut)
@@ -346,6 +346,29 @@ def recut_sites(reference, cut, guide, cassette, coding_strand=None,
             )
         )
     return tuple(sites)
+
+
+def valid_rescue_site(reference, cut, cassette, coding_strand,
+                      max_mismatches=4, cassette_format=NO_DIAGNOSTIC):
+    """Return whether the edited locus has only its intended rescue target."""
+    sites = recut_sites(
+        reference,
+        cut,
+        cassette.guide,
+        cassette,
+        coding_strand,
+        max_mismatches=max_mismatches,
+        cassette_format=cassette_format,
+    )
+    if len(sites) != 1:
+        return False
+
+    site = sites[0]
+    return (
+        site.target == cassette.guide
+        and site.pam == cassette.pam
+        and site.target_strand == coding_strand
+    )
 
 
 def load_cassettes(path):

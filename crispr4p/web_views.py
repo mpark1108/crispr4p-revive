@@ -496,6 +496,9 @@ def render_design(
         except (ValueError, TypeError):
             return "- &deg;C"
 
+    def primer_sequence(value):
+        return f"5'-{value}-3'" if value else "-"
+
     context = {
         'name': result.name or '-',
         'chromosome': result.chromosome,
@@ -504,10 +507,14 @@ def render_design(
         'hrfw': result.hr_dna[0],
         'hrrv': result.hr_dna[1],
         'deleted_dna': result.hr_dna[2],
-        'primer_left': primer.get('PRIMER_LEFT_0_SEQUENCE', '-'),
-        'left_tm': tm(primer.get('PRIMER_LEFT_0_TM', 0)),
-        'primer_right': primer.get('PRIMER_RIGHT_0_SEQUENCE', '-'),
-        'right_tm': tm(primer.get('PRIMER_RIGHT_0_TM', 0)),
+        'primer_left': primer_sequence(
+            primer.get('PRIMER_LEFT_0_SEQUENCE')
+        ),
+        'left_tm': tm(primer.get('PRIMER_LEFT_0_TM')),
+        'primer_right': primer_sequence(
+            primer.get('PRIMER_RIGHT_0_SEQUENCE')
+        ),
+        'right_tm': tm(primer.get('PRIMER_RIGHT_0_TM')),
         'deleted_dna_size': str(
             primer.get('PRIMER_PAIR_0_PRODUCT_SIZE', '-')
         ) + " (bp)",
