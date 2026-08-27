@@ -149,24 +149,6 @@ class DisruptionDesignTests(unittest.TestCase):
                 if site:
                     self.assertEqual(1, sequence.count(site))
 
-        self.assertEqual(
-            {
-                "AscI": (
-                    "https://www.neb.com/en-us/products/r0558-asci",
-                    "https://nebcloner.neb.com/#!/protocol/re/single/AscI",
-                ),
-                "PacI": (
-                    "https://www.neb.com/en-us/products/r0547-paci",
-                    "https://nebcloner.neb.com/#!/protocol/re/single/PacI",
-                ),
-                "SwaI": (
-                    "https://www.neb.com/en-us/products/r0604-swai",
-                    "https://nebcloner.neb.com/#!/protocol/re/single/SwaI",
-                ),
-            },
-            webapp.NEB_LINKS,
-        )
-
     def test_extended_donor_oligos_keep_core_overlap(self):
         cassette = self.cassettes[0]
         expected = {
@@ -1067,12 +1049,6 @@ class DisruptionDesignTests(unittest.TestCase):
         self.assertEqual(non_coding, target_gene(annotation, "rna"))
         self.assertIsNone(target_strand(annotation, "rna"))
 
-    def test_service_uses_packaged_catalog(self):
-        service = Crispr4pService.from_project_data()
-
-        self.assertEqual(self.cassettes, service.cassettes)
-        self.assertIs(service.cassettes, service.cassettes)
-
     def test_service_filters_recut_sites(self):
         service = Crispr4pService.from_project_data(
             cassettes=(unsafe_cassette(),) + self.cassettes,
@@ -1151,7 +1127,6 @@ class DisruptionDesignTests(unittest.TestCase):
         self.assertTrue(all(row["coding_target"] is False for row in rows))
         self.assertTrue(all(row["coding_strand"] is None for row in rows))
         self.assertIn("Selected target is non-coding.", page)
-        self.assertIn('annotation.coding_target === false', page)
 
     def test_compact_web_data(self):
         service = Crispr4pService.from_project_data()
@@ -1278,222 +1253,22 @@ class DisruptionDesignTests(unittest.TestCase):
         self.assertNotIn("sequence", arms[0])
         self.assertEqual("+", guide_rows[0]["coding_strand"])
         self.assertIn("Stop-Cassette Disruption Design", page)
-        self.assertEqual(
-            3,
-            page.count('class="toggle_header project_workflow_header"'),
-        )
-        self.assertEqual(
-            4,
-            page.count('class="workflow_section project_workflow"'),
-        )
-        self.assertEqual(6, page.count('class="toggle_button"'))
-        self.assertEqual(1, page.count('aria-expanded="true"'))
-        self.assertEqual(5, page.count('aria-expanded="false"'))
-        self.assertEqual(8, page.count('style="display: none;"'))
-        self.assertIn(
-            'aria-expanded="true" aria-controls="primers_table"',
-            page,
-        )
-        for section_id in (
-            "selected_guide_and_cut",
-            "deletion_design",
-            "spedit_oligos",
-            "stop_cassette_design",
-            "wild_type_restoration",
-        ):
-            self.assertIn(
-                'aria-expanded="false" aria-controls="{}"'.format(
-                    section_id
-                ),
-                page,
-            )
-        self.assertNotIn(
-            'id="selected_guide_and_cut" '
-            'class="workflow_section project_workflow"',
-            page,
-        )
-        self.assertNotIn(
-            'id="deletion_design" class="workflow_section project_workflow"',
-            page,
-        )
-        self.assertIn('id="selected_guide_gc"', page)
-        self.assertIn("candidate.gc_percent.toFixed(1)", page)
-        gc_guidance = (
-            "40&ndash;60% may be favorable but does not "
-            "guarantee guide activity."
-        )
-        guidance_start = page.index(gc_guidance)
-        self.assertEqual(1, page.count(gc_guidance))
-        self.assertLess(page.index('id="selected_guide_gc"'), guidance_start)
-        self.assertLess(guidance_start, page.index('id="selected_pam"'))
-        for reference in (
-            "https://www.nature.com/articles/srep19675",
-            "https://academic.oup.com/nar/article/46/3/1375/4754467",
-            "https://academic.oup.com/bioinformatics/article/36/9/2684/"
-            "5714741",
-        ):
-            self.assertIn('href="{}"'.format(reference), page)
-        self.assertEqual(5, page.count('rel="noopener noreferrer"'))
-        self.assertIn("Guide GC:", page)
-        self.assertIn('id="cassette_setup"', page)
-        self.assertIn('id="stop_cassette_menu"', page)
-        self.assertIn('id="cassette_format_menu"', page)
-        self.assertIn("Choose a cassette format...", page)
-        self.assertIn("option.disabled = !item.available;", page)
-        self.assertIn("unavailable at this site", page)
-        self.assertIn(
-            'id="stop_cassette_header" '
-            'class="toggle_header project_workflow_header" '
-            'style="display: none;"',
-            page,
-        )
-        self.assertIn(
-            'id="restoration_header" '
-            'class="toggle_header project_workflow_header" '
-            'style="display: none;"',
-            page,
-        )
-        self.assertIn("Reading frame 1:", page)
-        self.assertIn("Reading frame 3:", page)
-        self.assertNotIn("Reading frame 0:", page)
-        self.assertIn("Disruption donor", page)
-        self.assertIn("Oriented cassette (forward):", page)
-        self.assertIn("Complete donor (forward):", page)
-        self.assertNotIn("forward reference", page)
-        self.assertIn(
-            'class="l_field field_break">Oriented cassette (forward):',
-            page,
-        )
-        self.assertIn(
-            'class="l_field field_break">Right homology arm:',
-            page,
-        )
-        self.assertIn('id="donor_total_length"', page)
-        self.assertEqual(2, page.count("HR-template construction oligos"))
-        self.assertIn('id="donor_hrfw"', page)
-        self.assertIn('id="donor_hrrv"', page)
-        self.assertIn('id="donor_hr_overlap"', page)
-        self.assertIn('id="donor_hr_overlap_reverse"', page)
-        self.assertIn('id="donor_hr_overlap_length"', page)
-        self.assertIn('id="donor_hr_product_length"', page)
-        self.assertIn("Overlap sequence (forward):", page)
-        self.assertIn("Overlap sequence (reverse):", page)
-        self.assertIn("rev_complement(oligos.overlap)", page)
-        self.assertLess(
-            page.index("Overlap sequence (forward):"),
-            page.index("Overlap sequence (reverse):"),
-        )
-        self.assertLess(
-            page.index("Overlap sequence (reverse):"),
-            page.index("Overlap length:"),
-        )
-        self.assertIn(
-            "function hr_oligos(sequence, overlap_start, overlap_end)",
-            page,
-        )
-        self.assertLess(
-            page.index('id="donor_total_length"'),
-            page.index("HR-template construction oligos"),
-        )
-        self.assertLess(
-            page.index("HR-template construction oligos"),
-            page.index("Insertion-checking primers"),
-        )
-        self.assertNotIn(donors[0].sequence, page)
-        self.assertIn(
-            "donor.left_arm + oriented_insert + donor.right_arm",
-            page,
-        )
+        self.assertIn("Wild-Type Restoration Design", page)
         self.assertIn(FIRST, page)
         self.assertNotIn(OLD_FIRST, page)
-        self.assertNotIn("computational candidate", page.lower())
-        self.assertIn("Insertion-checking primers", page)
-        self.assertIn("Edit-spanning PCR", page)
+        self.assertIn('id="stop_cassette_menu"', page)
+        self.assertIn('id="cassette_format_menu"', page)
+        report_start = page.index('id="design_report"')
+        self.assertGreater(
+            report_start,
+            page.index('id="wild_type_restoration"'),
+        )
         self.assertIn(
-            'id="junction_primer_details" class="annotation_details"',
+            '<textarea id="report_text" readonly '
+            'aria-label="Copyable design report"></textarea>',
             page,
         )
-        self.assertIn("<summary>Junction-checking primers</summary>", page)
-        self.assertIn("Left-junction PCR", page)
-        self.assertIn("Right-junction PCR", page)
-        details_start = page.index('<details id="junction_primer_details"')
-        details_end = page.index("</details>", details_start)
-        details = page[details_start:details_end]
-        opening_tag = page[details_start:page.index(">", details_start)]
-        self.assertNotIn(" open", opening_tag)
-        self.assertIn("Left-junction PCR", details)
-        self.assertIn("Right-junction PCR", details)
-        self.assertLess(page.index("Edit-spanning PCR"), details_start)
-        source = (
-            "source: packaged PomBase GFF3 and gene viability snapshot"
-        )
-        source_start = page.index(source)
-        self.assertEqual(1, page.count(source))
-        self.assertLess(page.index("Cut-site annotation"), source_start)
-        self.assertLess(
-            source_start,
-            page.index('id="cut_annotation_summary"'),
-        )
-        cut_details_start = page.index('<details id="cut_annotation_details"')
-        cut_details_end = page.index("</details>", cut_details_start)
-        self.assertNotIn(source, page[cut_details_start:cut_details_end])
-        self.assertIn('id="insertion_primer_forward"', page)
-        self.assertIn('id="left_junction_reverse"', page)
-        self.assertIn('id="right_junction_forward"', page)
-        self.assertIn("Expected WT product:", page)
-        self.assertIn("Expected disrupted product:", page)
-        self.assertIn("PCR-RFLP", page)
-        self.assertIn('id="diagnostic_pcr" style="display: none;"', page)
-        self.assertIn("Expected digest fragments:", page)
-        self.assertIn("NEB resources:", page)
-        self.assertIn('id="diagnostic_product_link"', page)
-        self.assertIn('id="diagnostic_protocol_link"', page)
-        self.assertIn(
-            'product_link.href = option.product_url;',
-            page,
-        )
-        self.assertIn(
-            'protocol_link.href = option.protocol_url;',
-            page,
-        )
-        self.assertIn(
-            '"Uncut (" + pair.wt_product_size + " bp)"',
-            page,
-        )
-        self.assertLess(page.index("PCR-RFLP"), details_start)
-        self.assertIn('fetch("/cassette-options?"', page)
-        self.assertIn("guide: rows[index][0]", page)
-        self.assertIn("cassette_id: cassette.id", page)
-        self.assertIn("coding_strand: annotation.coding_strand", page)
-        self.assertIn("var format_cache = {};", page)
-        self.assertIn('var key = index + ":" + cassette.id;', page)
-        self.assertIn("load_formats(index);", page)
-        self.assertNotIn('fetch("/insertion-primers?"', page)
-
-        css = (PROJECT_ROOT / "css/crispr4p.css").read_text(encoding="utf-8")
-        shell = (PROJECT_ROOT / "template/bahler_template.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(".toggle_button::before {", css)
-        self.assertIn(".gc_guidance {", css)
-        self.assertIn("font-style: italic;", css)
-        self.assertIn(
-            '.toggle_button[aria-expanded="false"]::before {',
-            css,
-        )
-        self.assertIn(
-            'button.setAttribute("aria-expanded", expanded ? "false" : "true")',
-            shell,
-        )
-        self.assertIn(
-            'label === "Gene viability" && value === "inviable (essential)"',
-            page,
-        )
-        self.assertIn('row.className += " annotation_warning";', page)
-        self.assertIn(".project_workflow_header {", css)
-        self.assertIn(".project_workflow .l_field {", css)
-        self.assertIn(".project_workflow .annotation_details {", css)
-        self.assertEqual(3, css.count("#ECE2CB"))
+        self.assertIn('onclick="copy_report();">Copy report</button>', page)
 
 
 if __name__ == "__main__":

@@ -420,7 +420,7 @@ def render_oligo(result: OligoAnalysisResult):
     details_html = ""
     if result.full_matches:
         details_html += '<table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%; font-family: monospace; font-size: 12px;">'
-        details_html += '<tr style="background-color: #D1F0A6;"><th>#</th><th>Chromosome</th><th>PAM coordinates (1-based, inclusive)</th><th>Cas9 cut</th><th>Strand</th><th>Genomic Target Sequence (Seed)</th><th>PAM</th></tr>'
+        details_html += '<tr style="background-color: #D1F0A6;"><th>#</th><th>Chromosome</th><th>PAM coordinates</th><th>Cas9 cut</th><th>Strand</th><th>Genomic Target Sequence (Seed)</th><th>PAM</th></tr>'
         for index, match in enumerate(result.full_matches):
             strand = "+" if match.strand == 1 else "-"
             details_html += (

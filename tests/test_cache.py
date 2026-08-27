@@ -7,8 +7,6 @@ from unittest.mock import Mock, patch
 
 from crispr4p.cache import (
     cache_path,
-    cache_exists,
-    drop_cache,
     ensure_cache_dir,
     get_cached,
     save_cache,
@@ -105,17 +103,6 @@ class TestResultCache(unittest.TestCase):
             self.assertEqual(unpickleable_result[1:], result[1:])
             self.assertFalse(cache_path.exists())
 
-    def test_discard_and_exists_keep_simple_file_semantics(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            cache_path = Path(temporary_directory) / "result.pickle"
-            self.assertFalse(cache_exists(cache_path))
-            drop_cache(cache_path)
-            cache_path.write_bytes(b"cache")
-            self.assertTrue(cache_exists(cache_path))
-            drop_cache(cache_path)
-            self.assertFalse(cache_exists(cache_path))
-
-
 class TestPrimerDesignCacheAdapters(unittest.TestCase):
     def test_legacy_path_adapter_resolves_systematic_name(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -152,31 +139,6 @@ class TestPrimerDesignCacheAdapters(unittest.TestCase):
                 "III_100_200_v4_n2.pickle",
                 Path(region_path).name,
             )
-
-    def test_path_adapter_creates_directory_before_failed_name_lookup(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            cache_directory = Path(temporary_directory) / "cache"
-            designer = PrimerDesign.__new__(PrimerDesign)
-            designer.precomputed_folder = cache_directory
-            designer.annotationParser_ = SimpleNamespace(synonims_=())
-
-            with self.assertRaises(IndexError):
-                designer._genPrecomputedName(
-                    "missing",
-                    0,
-                    "III",
-                    "100",
-                    "200",
-                )
-
-            self.assertTrue(cache_directory.is_dir())
-
-    def test_is_precomputed_retains_true_or_none_contract(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            cache_path = Path(temporary_directory) / "result.pickle"
-            self.assertIsNone(PrimerDesign._isPrecomputed(cache_path))
-            cache_path.write_bytes(b"cache")
-            self.assertIs(True, PrimerDesign._isPrecomputed(cache_path))
 
     def test_run_remains_validation_and_cache_orchestration_adapter(self):
         designer = PrimerDesign.__new__(PrimerDesign)

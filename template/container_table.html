@@ -1,9 +1,9 @@
 <div id="search_content">
   <div id="search_summary">
     <h4>Your target region is:</h4>
-    <b>Name</b>=%(name)s<br>
-    <b>chromosome</b>=%(chromosome)s<br>
-    <b>Coordinates</b>=%(start)s to %(end)s<br>
+    <b>Name</b>=<span id="query_name">%(name)s</span><br>
+    <b>chromosome</b>=<span id="query_chromosome">%(chromosome)s</span><br>
+    <b>Coordinates</b>=<span id="query_coordinates">%(start)s to %(end)s</span><br>
   </div>
 
   <h3 class="toggle_header">
@@ -36,7 +36,7 @@
       </div>
     </div><br>
     <div class="l_field">PAM:</div><div class="r_field" id="selected_pam"></div><br>
-    <div class="l_field">PAM coordinates (1-based, inclusive):</div><div class="r_field" id="selected_pam_coordinates"></div><br>
+    <div class="l_field">PAM coordinates:</div><div class="r_field" id="selected_pam_coordinates"></div><br>
     <div class="l_field">Guide strand:</div><div class="r_field" id="selected_guide_strand"></div><br>
     <div class="l_field">Cas9 cut:</div><div class="r_field" id="selected_cut"></div><br>
 
@@ -63,17 +63,17 @@
     <div class="l_field">Ligation-free sgRv:</div><div class="r_field" id="overlapping_primer_reverse"></div><br>
 
     <h5>Deletion HR-template primers</h5>
-    <div class="l_field">HRFw:</div><div class="r_field">%(hrfw)s</div><br>
-    <div class="l_field">HRRv:</div><div class="r_field">%(hrrv)s</div><br>
+    <div class="l_field">HRFw:</div><div class="r_field" id="deletion_hrfw">%(hrfw)s</div><br>
+    <div class="l_field">HRRv:</div><div class="r_field" id="deletion_hrrv">%(hrrv)s</div><br>
 
     <h5>Deletion-checking primers</h5>
-    <div class="l_field">CkFw:</div><div class="r_field">%(primer_left)s</div><br>
-    <div class="l_field">CkFw Tm:</div><div class="r_field">%(left_tm)s</div><br>
-    <div class="l_field">CkRv:</div><div class="r_field">%(primer_right)s</div><br>
-    <div class="l_field">CkRv Tm:</div><div class="r_field">%(right_tm)s</div><br>
-    <div class="l_field">PCR product size with deletion:</div><div class="r_field">%(deleted_dna_size)s</div><br>
-    <div class="l_field">PCR product size without deletion:</div><div class="r_field">%(negative_result_size)s</div><br>
-    <div class="l_field">Region surrounding deletion junction:</div><div class="r_field">%(deleted_dna)s</div><br>
+    <div class="l_field">CkFw:</div><div class="r_field" id="deletion_primer_forward">%(primer_left)s</div><br>
+    <div class="l_field">CkFw Tm:</div><div class="r_field" id="deletion_primer_forward_tm">%(left_tm)s</div><br>
+    <div class="l_field">CkRv:</div><div class="r_field" id="deletion_primer_reverse">%(primer_right)s</div><br>
+    <div class="l_field">CkRv Tm:</div><div class="r_field" id="deletion_primer_reverse_tm">%(right_tm)s</div><br>
+    <div class="l_field">PCR product size with deletion:</div><div class="r_field" id="deletion_product_size">%(deleted_dna_size)s</div><br>
+    <div class="l_field">PCR product size without deletion:</div><div class="r_field" id="deletion_wt_size">%(negative_result_size)s</div><br>
+    <div class="l_field">Region surrounding deletion junction:</div><div class="r_field" id="deletion_junction">%(deleted_dna)s</div><br>
   </div>
 
   <h3 class="toggle_header project_workflow_header">
@@ -92,7 +92,7 @@
     <div class="l_field">Internal BsaI site check:</div>
     <div class="r_field" id="spedit_bsai_warning"></div><br>
 
-    <div id="spedit_error" class="annotation_warning"></div>
+    <div id="spedit_error" class="annotation_warning" data-report-status></div>
   </div>
 
   <div id="cassette_setup" class="workflow_section project_workflow">
@@ -147,7 +147,7 @@
     <div class="l_field">Expected HR-template product:</div><div class="r_field" id="donor_hr_product_length"></div><br>
 
     <h5>Insertion-checking primers</h5>
-    <div id="insertion_primer_status"></div>
+    <div id="insertion_primer_status" data-report-status></div>
     <h6>Edit-spanning PCR</h6>
     <div class="l_field">CkFw:</div><div class="r_field" id="insertion_primer_forward"></div><br>
     <div class="l_field">CkFw Tm:</div><div class="r_field" id="insertion_primer_forward_tm"></div><br>
@@ -173,7 +173,7 @@
 
     <details id="junction_primer_details" class="annotation_details">
       <summary>Junction-checking primers</summary>
-      <div id="junction_primer_status"></div>
+      <div id="junction_primer_status" data-report-status></div>
       <h6>Left-junction PCR</h6>
       <div class="l_field">CkFw:</div><div class="r_field" id="left_junction_forward"></div><br>
       <div class="l_field">CkFw Tm:</div><div class="r_field" id="left_junction_forward_tm"></div><br>
@@ -197,7 +197,7 @@
     <button type="button" class="toggle_button" aria-expanded="false" aria-controls="wild_type_restoration" onclick="toggle_interface(document.getElementById('wild_type_restoration'), this)">Wild-Type Restoration Design</button>
   </h3>
   <div id="wild_type_restoration" class="workflow_section project_workflow" style="display: none;">
-    <div id="restoration_status"></div>
+    <div id="restoration_status" data-report-status></div>
     <div id="restoration_content">
     <h5>Universal rescue guide</h5>
     <div class="l_field">Protospacer:</div><div class="r_field" id="restoration_guide"></div><br>
@@ -228,6 +228,15 @@
     <div class="l_field">CkRv:</div><div class="r_field" id="restoration_primer_reverse"></div><br>
     <div class="l_field">CkRv Tm:</div><div class="r_field" id="restoration_primer_reverse_tm"></div><br>
     <div class="l_field">Expected restored product:</div><div class="r_field" id="restoration_product_size"></div><br>
+    </div>
+  </div>
+
+  <div id="design_report" class="design_report">
+    <h3>Copyable report</h3>
+    <textarea id="report_text" readonly aria-label="Copyable design report"></textarea>
+    <div class="report_actions">
+      <button type="button" onclick="copy_report();">Copy report</button>
+      <span id="copy_report_status" aria-live="polite"></span>
     </div>
   </div>
 
@@ -750,6 +759,7 @@
         cassette_menu.options.length = 0;
         active_formats = [];
         set_designs_visible(false);
+        update_report();
         return;
       }
 
@@ -757,6 +767,7 @@
       if (!annotation || !cassette) {
         active_formats = [];
         set_designs_visible(false);
+        update_report();
         return;
       }
       if (format_menu.value) {
@@ -776,6 +787,7 @@
       loading.disabled = true;
       format_menu.appendChild(loading);
       format_menu.disabled = true;
+      update_report();
       if (format_requests[key]) {
         return;
       }
@@ -813,6 +825,7 @@
             format_menu.options.length = 0;
             format_menu.appendChild(new Option(error.message, ""));
             format_menu.disabled = true;
+            update_report();
           }
         });
     }
@@ -828,6 +841,7 @@
         update_donor(index || 0, null, null);
         update_restoration(index || 0, null);
         clear_insertion_primers();
+        update_report();
         return;
       }
 
@@ -856,6 +870,7 @@
       update_donor(index, cassette, option);
       update_restoration(index, cassette);
       show_insertion_primers(option.primers, option);
+      update_report();
     }
 
     function show_insertion_primers(pair, option) {
@@ -1010,6 +1025,211 @@
       return selected ? Number(selected.value) : null;
     }
 
+    function report_value(id) {
+      var element = document.getElementById(id);
+      return element ? element.textContent.replace(/\s+/g, " ").trim() : "";
+    }
+
+    function report_field(lines, label, id) {
+      var value = report_value(id);
+      if (value) {
+        lines.push(label + ": " + value);
+      }
+    }
+
+    function report_heading(lines, heading) {
+      lines.push("", heading);
+    }
+
+    function report_menu(lines, label, id) {
+      var menu = document.getElementById(id);
+      if (menu && menu.selectedIndex >= 0 && menu.value) {
+        lines.push(label + ": " + menu.options[menu.selectedIndex].textContent);
+      }
+    }
+
+    function hidden_in_report(element, section) {
+      for (var parent = element; parent && parent !== section;
+           parent = parent.parentElement) {
+        if (parent.style && parent.style.display === "none") {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function report_field_text(field) {
+      var value = field.nextElementSibling;
+      if (!value || !value.classList.contains("r_field")) {
+        return "";
+      }
+      var links = value.querySelectorAll("a[href]");
+      if (!links.length) {
+        return value.textContent.replace(/\s+/g, " ").trim();
+      }
+      var parts = [];
+      for (var index = 0; index < links.length; index++) {
+        parts.push(
+          links[index].textContent.trim() + " (" + links[index].href + ")"
+        );
+      }
+      return parts.join("; ");
+    }
+
+    function report_section(lines, heading, id) {
+      var section = document.getElementById(id);
+      if (!section) {
+        return;
+      }
+      if (heading) {
+        report_heading(lines, heading);
+      }
+      var headings = [];
+      function add_text(text) {
+        if (!text) {
+          return;
+        }
+        for (var heading_index = 0;
+             heading_index < headings.length;
+             heading_index++) {
+          report_heading(lines, headings[heading_index].text);
+        }
+        headings = [];
+        lines.push(text);
+      }
+      var items = section.querySelectorAll(
+        "h5, h6, summary, .l_field, [data-report-status]"
+      );
+      for (var index = 0; index < items.length; index++) {
+        var item = items[index];
+        if (hidden_in_report(item, section)) {
+          continue;
+        }
+        if (item.matches("h5, h6, summary")) {
+          var pending = {
+            level: item.tagName === "H6" ? "h6" : "h5",
+            text: item.textContent.trim().toUpperCase()
+          };
+          if (pending.level === "h5") {
+            headings = [pending];
+          } else {
+            if (headings.length &&
+                headings[headings.length - 1].level === "h6") {
+              headings.pop();
+            }
+            headings.push(pending);
+          }
+        } else if (item.classList.contains("l_field")) {
+          var value = report_field_text(item);
+          if (value) {
+            add_text(item.textContent.trim() + " " + value);
+          }
+        } else {
+          var status = item.textContent.replace(/\s+/g, " ").trim();
+          if (status) {
+            add_text("Status: " + status);
+          }
+        }
+      }
+    }
+
+    function report_annotation(lines) {
+      report_heading(lines, "CUT-SITE SUMMARY");
+      var summary = document.getElementById("cut_annotation_summary");
+      for (var index = 0; summary && index < summary.children.length; index++) {
+        var text = summary.children[index].textContent
+          .replace(/\s+/g, " ").trim();
+        if (text) {
+          lines.push(text);
+        }
+      }
+      report_field(lines, "Status", "cut_annotation_error");
+    }
+
+    function build_report() {
+      var lines = ["CRISPR4P-Revive Design"];
+
+      report_heading(lines, "QUERY");
+      report_field(lines, "Name", "query_name");
+      report_field(lines, "Chromosome", "query_chromosome");
+      report_field(lines, "Coordinates", "query_coordinates");
+
+      report_heading(lines, "SELECTED sgRNA AND CUT SITE");
+      report_field(lines, "sgRNA", "selected_guide");
+      report_field(lines, "sgRNA GC content", "selected_guide_gc");
+      report_field(lines, "PAM", "selected_pam");
+      report_field(
+        lines,
+        "PAM coordinates",
+        "selected_pam_coordinates"
+      );
+      report_field(lines, "Guide strand", "selected_guide_strand");
+      report_field(lines, "Cas9 cut", "selected_cut");
+
+      report_annotation(lines);
+      report_section(
+        lines,
+        "DELETION DESIGN — ORIGINAL CRISPR4P",
+        "deletion_design"
+      );
+      report_section(
+        lines,
+        "SpEDIT/pLSB GOLDEN GATE CLONING OLIGOS",
+        "spedit_oligos"
+      );
+
+      var cassette_format = document.getElementById("cassette_format_menu");
+      if (cassette_format && cassette_format.value) {
+        report_heading(lines, "STOP-CASSETTE DISRUPTION DESIGN");
+        report_menu(lines, "Stop cassette", "stop_cassette_menu");
+        report_menu(lines, "Cassette format", "cassette_format_menu");
+        report_section(lines, null, "stop_cassette_design");
+        report_section(
+          lines,
+          "WILD-TYPE RESTORATION DESIGN",
+          "wild_type_restoration"
+        );
+      }
+
+      return lines.join("\n").trim() + "\n";
+    }
+
+    function update_report() {
+      document.getElementById("report_text").value = build_report();
+      document.getElementById("copy_report_status").textContent = "";
+    }
+
+    function select_report() {
+      var report = document.getElementById("report_text");
+      report.focus();
+      report.select();
+      report.setSelectionRange(0, report.value.length);
+    }
+
+    function copy_report() {
+      update_report();
+      var report = document.getElementById("report_text");
+      var status = document.getElementById("copy_report_status");
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(report.value).then(function() {
+          status.textContent = "Copied.";
+        }).catch(function() {
+          select_report();
+          status.textContent = "Report selected; press Ctrl+C to copy.";
+        });
+        return;
+      }
+
+      select_report();
+      try {
+        status.textContent = document.execCommand("copy")
+          ? "Copied."
+          : "Report selected; press Ctrl+C to copy.";
+      } catch (error) {
+        status.textContent = "Report selected; press Ctrl+C to copy.";
+      }
+    }
+
     function update_primer(number) {
       var index = Number(number);
       var primer = rows[index][1];
@@ -1027,6 +1247,7 @@
       update_annotation(index);
       update_spedit(index);
       load_formats(index);
+      update_report();
     }
 
     var rows = %(json_table)s;

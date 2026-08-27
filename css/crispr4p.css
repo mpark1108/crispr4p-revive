@@ -402,6 +402,32 @@ border-width: 1px;
    margin-bottom: 8px;
 }
 
+.design_report {
+   clear: both;
+   margin: 24px 0;
+   width: 50%;
+}
+
+.design_report textarea {
+   box-sizing: border-box;
+   display: block;
+   font-family: Consolas, "Courier New", monospace;
+   font-size: 12px;
+   height: 220px;
+   line-height: 1.4;
+   overflow: auto;
+   resize: vertical;
+   width: 100%;
+}
+
+.report_actions {
+   margin-top: 6px;
+}
+
+#copy_report_status {
+   margin-left: 8px;
+}
+
 /* Footer */
 
 #footer {

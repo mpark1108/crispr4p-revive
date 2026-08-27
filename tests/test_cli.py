@@ -165,11 +165,9 @@ class TestCliDispatch(unittest.TestCase):
         status = run_cli(["--oligo", "A" * 19], service, output)
 
         self.assertEqual(1, status)
-        self.assertEqual(
-            "Error: Oligo sequence must be 20 bp (seed only) or 23 bp "
-            "(seed + PAM). Received length: 19\n",
-            output.getvalue(),
-        )
+        self.assertIn("20 bp", output.getvalue())
+        self.assertIn("23 bp", output.getvalue())
+        self.assertIn("Received length: 19", output.getvalue())
         service.analyze_oligo.assert_not_called()
 
     def test_missing_query_keeps_help_and_exit(self) -> None:

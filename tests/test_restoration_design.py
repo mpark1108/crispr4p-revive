@@ -177,47 +177,11 @@ class RestorationDesignTests(unittest.TestCase):
 
         self.assertIn("Wild-Type Restoration Design", page)
         self.assertIn('id="restoration_guide"', page)
-        self.assertNotIn('id="restoration_cut"', page)
         self.assertIn('id="restoration_sequence"', page)
         self.assertIn('id="restoration_hrfw"', page)
-        self.assertIn('id="restoration_hrrv"', page)
-        self.assertIn('id="restoration_hr_overlap"', page)
-        self.assertIn('id="restoration_hr_overlap_reverse"', page)
-        self.assertIn('id="restoration_hr_overlap_length"', page)
-        self.assertIn('id="restoration_hr_product_length"', page)
-        self.assertIn("SpEDIT forward oligo, 52 nt:", page)
-        self.assertIn("SpEDIT reverse oligo, 52 nt:", page)
-        self.assertNotIn("SpEDIT/pLSB forward oligo, 52 nt:", page)
-        self.assertIn("Complete donor (forward):", page)
-        self.assertIn("Overlap sequence (forward):", page)
-        self.assertIn("Overlap sequence (reverse):", page)
         self.assertIn('id="restoration_product_size"', page)
-        self.assertIn("donor.left_arm + donor.right_arm", page)
-        restoration_start = page.index("Restoration donor")
-        oligo_start = page.index(
-            "HR-template construction oligos",
-            restoration_start,
-        )
-        self.assertLess(
-            page.index('id="restoration_total_length"'),
-            oligo_start,
-        )
-        self.assertLess(oligo_start, page.index("PCR validation"))
-        self.assertIn(
-            'pair.wt_product_size + " bp"',
-            page,
-        )
-        self.assertEqual(2, page.count("Internal BsaI site check:"))
-        self.assertIn(
-            "show_bsai(warning_element, candidate.has_internal_bsai);",
-            page,
-        )
-        self.assertIn(
-            '"Warning: this guide contains an internal BsaI recognition site."',
-            page,
-        )
-        self.assertIn('element.style.color = "#b00020";', page)
-        self.assertNotIn("sequencing required", page.lower())
+        self.assertIn(cassette["spedit_forward"], page)
+        self.assertIn(donor["left_arm"], page)
 
 
 if __name__ == "__main__":

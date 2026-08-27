@@ -10,6 +10,7 @@ from crispr4p.guides import (
 
 PLUS_GUIDE = "ATACATACATACATACATAC"
 MINUS_GUIDE = "TATGTATGTATGTATGTATG"
+OVERLAPPING_GUIDE = "ATGATACATATGATACATAT"
 
 
 def synthetic_sequence():
@@ -145,6 +146,33 @@ class TestGuideDiscovery(unittest.TestCase):
             [(PLUS_GUIDE, "TGG")],
             [(guide.seed, guide.pam) for guide in guides],
         )
+
+    def test_finds_overlapping_ggg_pams_on_both_strands(self):
+        site = "A" + OVERLAPPING_GUIDE + "GGG" + "A"
+        references = {
+            1: site,
+            -1: PrimerDesign.reverseComplement(site),
+        }
+
+        for expected_strand, sequence in references.items():
+            with self.subTest(strand=expected_strand):
+                guides = find_guides(
+                    sequence,
+                    "synthetic",
+                    0,
+                    len(sequence) - 1,
+                    hit_factory=NGG,
+                    reverse_complement=PrimerDesign.reverseComplement,
+                )
+                matches = [
+                    guide
+                    for guide in guides
+                    if guide.seed == OVERLAPPING_GUIDE
+                    and guide.pam == "GGG"
+                ]
+
+                self.assertEqual(1, len(matches))
+                self.assertEqual(expected_strand, matches[0].strand)
 
     def test_rejects_an_interval_without_ngg_sites(self):
         with self.assertRaisesRegex(AssertionError, "No nGG found in your input"):

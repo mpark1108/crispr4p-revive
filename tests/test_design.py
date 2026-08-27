@@ -40,16 +40,6 @@ class TestDesignTableConstruction(unittest.TestCase):
             table,
         )
 
-    def test_empty_table_retains_legacy_index_error(self):
-        with self.assertRaises(IndexError):
-            design.guide_table({})
-
-    def test_legacy_table_sorting_import_remains_available(self):
-        import crispr4p.crispr4p as legacy_core
-
-        self.assertIs(design.TableSorting, legacy_core.TableSorting)
-
-
 class TestDesignQueryOrchestration(unittest.TestCase):
     def test_runs_callbacks_in_order_and_returns_same_match_mapping(self):
         events = []

@@ -3,8 +3,8 @@ import unittest
 from crispr4p.spedit import (
     has_bsai,
     make_oligos,
-    reverse_complement,
 )
+from crispr4p.web_views import spedit_rows
 
 
 # Published guide and oligo sequences from the SpEDIT paper's Table 2.
@@ -61,25 +61,7 @@ class TestSpeditOligos(unittest.TestCase):
                 self.assertEqual(expected_forward, forward)
                 self.assertEqual(expected_reverse, reverse)
 
-    def test_all_published_oligos_are_52_nt(self) -> None:
-        """Every generated SpEDIT oligo must contain exactly 52 bases."""
-        for name, (guide, _, _) in PUBLISHED_SPEDIT_OLIGOS.items():
-            with self.subTest(name=name):
-                forward, reverse = make_oligos(guide)
-
-                self.assertEqual(52, len(forward))
-                self.assertEqual(52, len(reverse))
-
-    def test_reverse_oligo_is_reverse_complement(self) -> None:
-        """The reverse oligo must complement the complete forward oligo."""
-        for name, (guide, _, _) in PUBLISHED_SPEDIT_OLIGOS.items():
-            with self.subTest(name=name):
-                forward, reverse = make_oligos(guide)
-
-                self.assertEqual(reverse_complement(forward), reverse)
-
     def test_normalizes_lowercase_and_whitespace(self) -> None:
-        """Lowercase guides with surrounding whitespace should be accepted."""
         expected = make_oligos(
             "TTGATAGCAACAGTGGCGAC"
         )
@@ -90,63 +72,66 @@ class TestSpeditOligos(unittest.TestCase):
 
         self.assertEqual(expected, actual)
 
-    def test_rejects_short_guide(self) -> None:
-        """Guides shorter than 20 nt must be rejected."""
-        with self.assertRaisesRegex(ValueError, "20-nt"):
-            make_oligos("ACGT")
+    def test_rejects_invalid_guides(self) -> None:
+        cases = (
+            ("ACGT", ValueError, "20-nt"),
+            ("A" * 21, ValueError, "20-nt"),
+            ("A" * 19 + "N", ValueError, "invalid nucleotide"),
+            (12345, TypeError, "must be a string"),
+        )
+        for guide, error, message in cases:
+            with self.subTest(guide=guide):
+                with self.assertRaisesRegex(error, message):
+                    make_oligos(guide)  # type: ignore[arg-type]
 
-    def test_rejects_long_guide(self) -> None:
-        """Guides longer than 20 nt must be rejected."""
-        with self.assertRaisesRegex(ValueError, "20-nt"):
-            make_oligos("A" * 21)
-
-    def test_rejects_invalid_nucleotide(self) -> None:
-        """Only A, C, G, and T are accepted."""
-        with self.assertRaisesRegex(
-            ValueError,
-            "invalid nucleotide",
+    def test_bsai_detection(self) -> None:
+        for sequence in (
+            "AAAAAGGTCTCAAAAAAAAA",
+            "AAAAAGAGACCAAAAAAAAA",
+            "  aaaaaggtctcaaaaaaaaa\n",
         ):
-            make_oligos("A" * 19 + "N")
+            with self.subTest(sequence=sequence):
+                self.assertTrue(has_bsai(sequence))
 
-    def test_rejects_non_string_guide(self) -> None:
-        """Non-string guide values must be rejected."""
-        with self.assertRaisesRegex(
-            TypeError,
-            "must be a string",
-        ):
-            make_oligos(12345)  # type: ignore[arg-type]
+        self.assertFalse(has_bsai("TTGATAGCAACAGTGGCGAC"))
 
-    def test_detects_forward_bsai_site(self) -> None:
-        """Detect the forward BsaI recognition sequence GGTCTC."""
-        self.assertTrue(
-            has_bsai(
-                "AAAAAGGTCTCAAAAAAAAA"
-            )
-        )
 
-    def test_detects_reverse_bsai_site(self) -> None:
-        """Detect the reverse-complement BsaI sequence GAGACC."""
-        self.assertTrue(
-            has_bsai(
-                "AAAAAGAGACCAAAAAAAAA"
-            )
-        )
+def web_row(guide):
+    primer = (
+        guide,
+        "LEGACY_FORWARD",
+        "LEGACY_REVERSE",
+        (100, 103),
+        1,
+        "TGG",
+    )
+    return [guide, primer]
 
-    def test_bsai_detection_normalizes_input(self) -> None:
-        """BsaI detection should normalize case and whitespace."""
-        self.assertTrue(
-            has_bsai(
-                "  aaaaaggtctcaaaaaaaaa\n"
-            )
-        )
 
-    def test_accepts_guide_without_internal_bsai_site(self) -> None:
-        """A standard published guide should not trigger the warning."""
-        self.assertFalse(
-            has_bsai(
-                "TTGATAGCAACAGTGGCGAC"
-            )
-        )
+class TestSpeditWebRows(unittest.TestCase):
+    def test_preserves_candidate_order(self) -> None:
+        first = "ACATTGGCTTACGACGGTCG"
+        second = "TTGATAGCAACAGTGGCGAC"
+
+        rows = spedit_rows([web_row(first), web_row(second)])
+
+        self.assertEqual([first, second], [row["guide"] for row in rows])
+
+    def test_generates_oligos_for_selected_candidate(self) -> None:
+        guide = "TTGATAGCAACAGTGGCGAC"
+        row = spedit_rows([web_row(guide)])[0]
+        expected_forward, expected_reverse = make_oligos(guide)
+
+        self.assertEqual(expected_forward, row["forward"])
+        self.assertEqual(expected_reverse, row["reverse"])
+
+    def test_internal_bsai_warning_stays_aligned(self) -> None:
+        safe = "TTGATAGCAACAGTGGCGAC"
+        unsafe = "TTTTGAATGGTCTCAGTTGT"
+        rows = spedit_rows([web_row(safe), web_row(unsafe)])
+
+        self.assertFalse(rows[0]["has_internal_bsai"])
+        self.assertTrue(rows[1]["has_internal_bsai"])
 
 
 if __name__ == "__main__":

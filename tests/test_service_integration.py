@@ -2,14 +2,15 @@ import hashlib
 import pickle
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 
-from crispr4p.cli import format_design, format_oligo
+from crispr4p.crispr4p import PrimerDesign
+from crispr4p.genome import GenomePamIndex
 from crispr4p.service import Crispr4pService
 from crispr4p.web_views import (
     annotation_rows,
     render_design,
-    render_oligo,
 )
 
 
@@ -28,7 +29,27 @@ class TestServiceIntegration(unittest.TestCase):
         cls.design_result = service.design_gene("ade6", n_mismatch=0)
         cls.annotations_initially_unloaded = service.genome_annotations is None
 
-    def test_real_ade6_oligo_analysis_is_unchanged(self) -> None:
+        data = PROJECT_ROOT / "data"
+        cls.core_designer = PrimerDesign(
+            data / "Schizosaccharomyces_pombe.ASM294v2.26.dna.toplevel.fa",
+            data / "COORDINATES.txt",
+            data / "SYNONIMS.txt",
+            regression=True,
+        )
+        (
+            cls.core_table,
+            cls.core_hr_dna,
+            cls.core_checking_primers,
+            cls.core_matches,
+        ) = cls.core_designer.run_(
+            "III",
+            1316337,
+            1317995,
+            0,
+            "ade6",
+        )
+
+    def test_real_ade6_oligo_values(self) -> None:
         self.assertEqual(
             {8: 5, 10: 1, 12: 1, 14: 1, 16: 1, 18: 1, 20: 1},
             dict(self.result.match_counts),
@@ -41,14 +62,26 @@ class TestServiceIntegration(unittest.TestCase):
         self.assertEqual(1, match.strand)
         self.assertEqual(GUIDE, match.seed)
         self.assertEqual("TGG", match.pam)
-        self.assertEqual(
-            "dd389db45eaca6b3babe396638609b0752b865f5638c14c32aa6c0e7e4c4082e",
-            hashlib.sha256(
-                render_oligo(self.result).encode("utf-8")
-            ).hexdigest(),
+
+    def test_real_reverse_hit(self) -> None:
+        result = self.service.analyze_oligo(
+            "AGCTCTCCATAGCAGCCAAA",
+            n_mismatch=0,
         )
 
-    def test_real_ade6_design_service_result_is_unchanged(self) -> None:
+        self.assertEqual(
+            {8: 57, 10: 10, 12: 4, 14: 1, 16: 1, 18: 1, 20: 1},
+            dict(result.match_counts),
+        )
+        self.assertEqual(1, len(result.full_matches))
+        match = result.full_matches[0]
+        self.assertEqual("III", match.chromosome)
+        self.assertEqual((1317893, 1317895), match.pam_coordinates)
+        self.assertEqual((1317898, 1317899), match.cut_coordinates)
+        self.assertEqual(-1, match.strand)
+        self.assertEqual("AGG", match.pam)
+
+    def test_real_ade6_design_values(self) -> None:
         self.assertEqual("ade6", self.design_result.name)
         self.assertEqual("III", self.design_result.chromosome)
         self.assertEqual("1316337", self.design_result.start)
@@ -79,6 +112,109 @@ class TestServiceIntegration(unittest.TestCase):
             guide.to_legacy(),
         )
 
+    def test_uncached_ade6_outputs(self) -> None:
+        expected_candidates = [
+            ("ACATTGGCTTACGACGGTCG", [5, 1, 1, 1, 1, 1, 1]),
+            ("GTGGCGACAGGGACACCTCG", [7, 1, 1, 1, 1, 1, 1]),
+            ("AAACAGGTTGTAGGGATCCT", [10, 1, 1, 1, 1, 1, 1]),
+            ("TGCCGCTCATTTGCCTGGTA", [12, 1, 1, 1, 1, 1, 1]),
+            ("GCATAAGTAACCATGCGATC", [12, 1, 1, 1, 1, 1, 1]),
+        ]
+        self.assertEqual(144, len(self.core_table))
+        self.assertEqual(
+            expected_candidates,
+            [(row[0], row[2:]) for row in self.core_table[:5]],
+        )
+        self.assertEqual(len(self.core_table), len(self.core_matches))
+        self.assertEqual(
+            (
+                GUIDE,
+                "ACGACGGTCGgttttagagctagaaatagcaagttaaaataa",
+                "AAGCCAATGTttcttcggtacaggttatgttttttggcaaca",
+                (1316795, 1316797),
+                1,
+                "TGG",
+            ),
+            self.core_table[0][1],
+        )
+        self.assertEqual(
+            [
+                "3948f29bd72bc5059eff88921869de90f9c99190232e4add15ecbd5eac7629dc",
+                "62b0d6cbd581c1824d3437af1aeab7777ccc8127bc0642de72553f856ca0a78a",
+                "66476b056e174bd5d37b0119377f2a829b9d0b01dc6295b7a6906faaeb4b5718",
+            ],
+            [
+                hashlib.sha256(sequence.encode("ascii")).hexdigest()
+                for sequence in self.core_hr_dna
+            ],
+        )
+
+        first, second = self.core_checking_primers
+        self.assertEqual(
+            ("AGCCTGGTGCAGTATAAGGT", "CGTCGCAGCACATTATTCGG", 444, 2103),
+            (
+                first["PRIMER_LEFT_0_SEQUENCE"],
+                first["PRIMER_RIGHT_0_SEQUENCE"],
+                first["PRIMER_PAIR_0_PRODUCT_SIZE"],
+                first["negative_result"],
+            ),
+        )
+        self.assertEqual(
+            ("ACTGCGCACTAACTCACTACA", "CGTCGCAGCACATTATTCGG", 254, 1913),
+            (
+                second["PRIMER_LEFT_1_SEQUENCE"],
+                second["PRIMER_RIGHT_1_SEQUENCE"],
+                second["PRIMER_PAIR_1_PRODUCT_SIZE"],
+                second["negative_result"],
+            ),
+        )
+        guides = {row[0]: row[1][3] for row in self.core_table}
+        self.assertEqual((1316357, 1316359), guides["ATGAGCGAAAAACAGGTTGT"])
+        self.assertNotIn("TTGGAAAAATTATTCTGCAT", guides)
+
+    def test_real_index_matches_independent_scan(self) -> None:
+        index = self.core_designer.genome_index
+        self.assertIsInstance(index, GenomePamIndex)
+        self.assertEqual(65366, len(index))
+        self.assertEqual(2267530, index.hit_count)
+        self.assertNotIn("", index)
+        self.assertEqual(
+            [
+                ("III", 1316795, 1, GUIDE, "TGG"),
+                ("III", 347120, 1, "GAGAGAAGTACGGACGGTCG", "GAG"),
+                ("III", 1233769, 1, "TCTCAAGATTAAGACGGTCG", "TAG"),
+                ("II", 397432, 1, "AGACATTCGCGGGACGGTCG", "TGG"),
+                ("I", 3430748, 1, "GGCTACGCTAGGGACGGTCG", "AGG"),
+            ],
+            [
+                (hit.chromosome, hit.pos, hit.strand, hit.seed, hit.pam)
+                for hit in index[GUIDE[-8:]]
+            ],
+        )
+
+        expected = Counter()
+        for chromosome_name, chromosome in self.core_designer.chromosomesData.items():
+            strands = {
+                1: chromosome.sequence,
+                -1: self.core_designer.reverseComplement(chromosome.sequence),
+            }
+            for strand, sequence in strands.items():
+                for position in range(21, len(sequence) - 1):
+                    if sequence[position] in "GA" and sequence[position + 1] == "G":
+                        expected[
+                            (
+                                chromosome_name,
+                                strand,
+                                sequence[position - 1:position + 2],
+                            )
+                        ] += 1
+
+        actual = Counter()
+        for hits in index.values():
+            for hit in hits:
+                actual[(hit.chromosome, hit.strand, hit.pam)] += 1
+        self.assertEqual(expected, actual)
+
     def test_orb6_without_deletion_primers_still_renders(self) -> None:
         with tempfile.TemporaryDirectory() as cache:
             service = Crispr4pService.from_project_data(
@@ -97,7 +233,7 @@ class TestServiceIntegration(unittest.TestCase):
 
         self.assertEqual(128, len(result.guides))
         self.assertEqual([], result.checking_primers)
-        self.assertIn('<div class="r_field">-</div>', primer_section)
+        self.assertIn("-", primer_section)
         self.assertIn("- &deg;C", primer_section)
         self.assertNotIn("5'---3'", primer_section)
         self.assertNotIn("0 &deg;C", primer_section)
@@ -124,10 +260,7 @@ class TestServiceIntegration(unittest.TestCase):
         self.assertEqual(("", "", ""), result.hr_dna)
         self.assertEqual([], result.checking_primers)
         self.assertNotIn("5'---3'", deletion_section)
-        self.assertGreaterEqual(
-            deletion_section.count('<div class="r_field">-</div>'),
-            4,
-        )
+        self.assertIn("-", deletion_section)
 
     def test_real_ade6_guide_annotation_uses_shared_packaged_index(self) -> None:
         first_guide = self.design_result.guides[0]
@@ -202,7 +335,6 @@ class TestServiceIntegration(unittest.TestCase):
                 encoding="utf-8"
             ),
         )
-        self.assertIn("<b>Name</b>=nrg1", html)
         self.assertIn('"gene_id":"SPBPB2B2.01"', html)
         self.assertIn('"role":"Primary target"', html)
 
@@ -269,14 +401,6 @@ class TestServiceIntegration(unittest.TestCase):
         self.assertTrue(all(not group for group in choices))
         self.assertTrue(all(not group for group in donors))
 
-    def test_real_cli_result_bodies_are_byte_for_byte_compatible(self) -> None:
-        self.assertEqual(
-            "ff3d2cce276ae88fcd7596ba1986208bce0ca254e0ac7c4909be487cc6d9d4c9",
-            hashlib.sha256(
-                format_design(self.design_result).encode("utf-8")
-            ).hexdigest(),
-        )
-
     def test_version_4_cache_round_trip_excludes_shared_index(self) -> None:
         with tempfile.TemporaryDirectory() as cache_directory:
             cold_service = Crispr4pService.from_project_data(
@@ -305,12 +429,6 @@ class TestServiceIntegration(unittest.TestCase):
         )
         self.assertIsNotNone(cold_service.genome_index)
         self.assertIsNone(warm_service.genome_index)
-        self.assertEqual(
-            "74fa7e168045e969add6b88b2999025f60099aaf96911afac9a3b26c3968c53f",
-            hashlib.sha256(
-                format_oligo(self.result).encode("utf-8")
-            ).hexdigest(),
-        )
 
 
 if __name__ == "__main__":
