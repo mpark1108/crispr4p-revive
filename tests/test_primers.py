@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 import crispr4p.crispr4p as legacy_core
 from crispr4p.crispr4p import PrimerDesign, chromosomeFasta
-from crispr4p.primers import build_hr_dna, checking_primers
+from crispr4p.primers import FlankError, build_hr_dna, checking_primers
 
 
 SEQUENCE = "A" * 300 + "G" * 200 + "C" * 300
@@ -48,6 +48,82 @@ class TestPrimerComputations(unittest.TestCase):
             ),
             result,
         )
+
+    def test_clips_available_flanks_at_reference_boundaries(self):
+        left_result = build_hr_dna(
+            SEQUENCE,
+            249,
+            END,
+            PrimerDesign.sequenceComplement_,
+        )
+        right_result = build_hr_dna(
+            SEQUENCE,
+            START,
+            len(SEQUENCE) - 249,
+            PrimerDesign.sequenceComplement_,
+        )
+
+        self.assertEqual((100, 100, 499), tuple(map(len, left_result)))
+        self.assertEqual((100, 100, 499), tuple(map(len, right_result)))
+
+        for start, end, excluded_start in (
+            (299, END, 219),
+            (START, len(SEQUENCE) - 299, 220),
+        ):
+            with self.subTest(kind="checking", start=start, end=end):
+                primer_designer = Mock(return_value={"PRIMER_PAIR_NUM_RETURNED": 0})
+                self.assertEqual(
+                    [],
+                    checking_primers(
+                        SEQUENCE,
+                        start,
+                        end,
+                        WIDTH,
+                        number_of_alternatives=2,
+                        primer_designer=primer_designer,
+                    ),
+                )
+                sequence_args, global_args = primer_designer.call_args.args
+                self.assertEqual([0, 599], sequence_args["SEQUENCE_INCLUDED_REGION"])
+                self.assertEqual(
+                    [[excluded_start, 160]],
+                    sequence_args["SEQUENCE_EXCLUDED_REGION"],
+                )
+                self.assertEqual(
+                    [[225, 599]],
+                    global_args["PRIMER_PRODUCT_SIZE_RANGE"],
+                )
+
+    def test_rejects_flanks_too_short_for_the_design(self):
+        for start, end in ((79, END), (START, len(SEQUENCE) - 79)):
+            with self.subTest(kind="HR", start=start, end=end):
+                with self.assertRaisesRegex(
+                    FlankError,
+                    "complete flanking sequence",
+                ):
+                    build_hr_dna(
+                        SEQUENCE,
+                        start,
+                        end,
+                        PrimerDesign.sequenceComplement_,
+                    )
+
+        primer_designer = Mock()
+        for start, end in ((97, END), (START, len(SEQUENCE) - 97)):
+            with self.subTest(kind="checking", start=start, end=end):
+                with self.assertRaisesRegex(
+                    FlankError,
+                    "complete flanking sequence",
+                ):
+                    checking_primers(
+                        SEQUENCE,
+                        start,
+                        end,
+                        WIDTH,
+                        number_of_alternatives=2,
+                        primer_designer=primer_designer,
+                    )
+        primer_designer.assert_not_called()
 
     def test_preserves_exact_primer3_inputs_and_result_shape(self):
         primer_designer = Mock(return_value=primer3_answer())
@@ -216,6 +292,20 @@ class TestPrimerComputations(unittest.TestCase):
             PUBLIC_START,
             PUBLIC_END,
             300,
+        )
+
+    def test_legacy_adapters_hide_unavailable_terminal_designs(self):
+        chromosome = chromosomeFasta("synthetic description\n" + SEQUENCE)
+        designer = PrimerDesign.__new__(PrimerDesign)
+        designer._numAlternativeCheckings = 2
+
+        self.assertEqual(
+            ("", "", ""),
+            designer.HR_DNA(chromosome, 1, PUBLIC_END),
+        )
+        self.assertEqual(
+            [],
+            designer.CheckingPrimers(chromosome, 1, PUBLIC_END),
         )
 
 

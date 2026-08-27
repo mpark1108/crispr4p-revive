@@ -509,9 +509,9 @@ def render_design(
         'chromosome': result.chromosome,
         'start': result.start,
         'end': result.end,
-        'hrfw': result.hr_dna[0],
-        'hrrv': result.hr_dna[1],
-        'deleted_dna': result.hr_dna[2],
+        'hrfw': primer_sequence(result.hr_dna[0]),
+        'hrrv': primer_sequence(result.hr_dna[1]),
+        'deleted_dna': result.hr_dna[2] or '-',
         'primer_left': primer_sequence(
             primer.get('PRIMER_LEFT_0_SEQUENCE')
         ),

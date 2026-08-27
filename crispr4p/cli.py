@@ -67,9 +67,9 @@ def format_design(result):
         print("gRNAfw: ", grna[1], file=output)
         print("gRNArv: ", grna[2], "\n", file=output)
 
-    print("HRfw: ", result.hr_dna[0], file=output)
-    print("HRrv: ", result.hr_dna[1], file=output)
-    print("Deleted DNA: ", result.hr_dna[2], "\n", file=output)
+    print("HRfw: ", result.hr_dna[0] or "-", file=output)
+    print("HRrv: ", result.hr_dna[1] or "-", file=output)
+    print("Deleted DNA: ", result.hr_dna[2] or "-", "\n", file=output)
 
     if result.checking_primers:
         primer = result.checking_primers[0]

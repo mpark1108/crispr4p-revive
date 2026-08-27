@@ -30,6 +30,7 @@ if __package__:
         read_fasta,
     )
     from .primers import (
+        FlankError,
         build_hr_dna,
         checking_primers,
         design_primers as _design_primers,
@@ -57,6 +58,7 @@ else:  # Support direct script execution.
         read_fasta,
     )
     from primers import (
+        FlankError,
         build_hr_dna,
         checking_primers,
         design_primers as _design_primers,
@@ -391,12 +393,15 @@ class PrimerDesign:
             :return: Tuple
         '''
         start_index, end_index = slice_bounds(start, end)
-        return build_hr_dna(
-            crFasta.sequence,
-            start_index,
-            end_index,
-            self.sequenceComplement_,
-        )
+        try:
+            return build_hr_dna(
+                crFasta.sequence,
+                start_index,
+                end_index,
+                self.sequenceComplement_,
+            )
+        except FlankError:
+            return "", "", ""
 
     def CheckingPrimers(self, crFasta, start, end):
         '''
@@ -410,14 +415,17 @@ class PrimerDesign:
 
     def CheckingPrimersWidth_(self, crFasta, start, end, width):
         start_index, end_index = slice_bounds(start, end)
-        return checking_primers(
-            crFasta.sequence,
-            start_index,
-            end_index,
-            width,
-            self._numAlternativeCheckings,
-            primer_designer=_design_primers,
-        )
+        try:
+            return checking_primers(
+                crFasta.sequence,
+                start_index,
+                end_index,
+                width,
+                self._numAlternativeCheckings,
+                primer_designer=_design_primers,
+            )
+        except FlankError:
+            return []
 
     @staticmethod
     def sequenceComplement_(sequence):

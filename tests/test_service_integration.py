@@ -102,6 +102,33 @@ class TestServiceIntegration(unittest.TestCase):
         self.assertNotIn("5'---3'", primer_section)
         self.assertNotIn("0 &deg;C", primer_section)
 
+    def test_terminal_gene_keeps_guides_without_invalid_deletion_output(self):
+        with tempfile.TemporaryDirectory() as cache:
+            service = Crispr4pService.from_project_data(
+                precomputed_folder=cache,
+                genome_index=self.service.genome_index,
+                reference_resources=self.service.reference_resources,
+            )
+            result = service.design_gene("SPAC212.11")
+            annotations = service.annotate_guides(result.guides)
+
+        template = (
+            PROJECT_ROOT / "template" / "container_table.html"
+        ).read_text(encoding="utf-8")
+        page = render_design(result, annotations, template)
+        start = page.index("<h5>Deletion HR-template primers</h5>")
+        end = page.index("<h3", start)
+        deletion_section = page[start:end]
+
+        self.assertTrue(result.guides)
+        self.assertEqual(("", "", ""), result.hr_dna)
+        self.assertEqual([], result.checking_primers)
+        self.assertNotIn("5'---3'", deletion_section)
+        self.assertGreaterEqual(
+            deletion_section.count('<div class="r_field">-</div>'),
+            4,
+        )
+
     def test_real_ade6_guide_annotation_uses_shared_packaged_index(self) -> None:
         first_guide = self.design_result.guides[0]
 

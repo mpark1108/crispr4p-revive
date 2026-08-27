@@ -39,6 +39,8 @@ class GenomePamIndex(Mapping):
                     # Lookahead keeps both overlapping PAMs in GGG.
                     for match in re.finditer(f"(?={pam_suffix})", sequence):
                         position = match.start()
+                        if position < seed_length + 1:
+                            continue
                         pam = sequence[position - 1:position + 2]
                         seed = sequence[
                             position - seed_length - 1:position - 1

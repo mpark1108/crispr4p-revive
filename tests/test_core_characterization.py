@@ -55,14 +55,14 @@ class TestCoreCharacterization(unittest.TestCase):
             tuple(self.designer.annotationParser_.getCoordsFromName("ade6")),
         )
 
-    def test_real_genome_index_shape_and_ade6_bucket_are_unchanged(self) -> None:
+    def test_real_genome_index_has_only_complete_targets(self) -> None:
         index = self.designer.genome_index
 
         self.assertIsInstance(index, GenomePamIndex)
         self.assertIs(index.by_suffix, self.designer.NGGs)
-        self.assertEqual(65367, len(index))
-        self.assertEqual(2267539, index.hit_count)
-        self.assertEqual(9, len(index.get("", ())))
+        self.assertEqual(65366, len(index))
+        self.assertEqual(2267530, index.hit_count)
+        self.assertNotIn("", index)
         self.assertEqual(
             [
                 ("III", 1316795, 1, "ACATTGGCTTACGACGGTCG", "TGG"),

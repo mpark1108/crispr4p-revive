@@ -93,6 +93,18 @@ class TestCoordinateConversions(unittest.TestCase):
                 PrimerDesign.reverseComplement,
             )
 
+        with self.assertRaisesRegex(
+            ValueError,
+            "outside the FASTA",
+        ):
+            hit_coordinates(
+                0,
+                1,
+                "",
+                "GG" + "A" * 30,
+                PrimerDesign.reverseComplement,
+            )
+
 
 class TestPrimerDesignCoordinateAdapter(unittest.TestCase):
     def test_coordinate_validation_accepts_the_last_reference_base(self):

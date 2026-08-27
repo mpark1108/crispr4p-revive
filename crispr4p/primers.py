@@ -18,6 +18,22 @@ def design_primers(sequence_args, global_args):
     return design(sequence_args, global_args)
 
 
+class FlankError(ValueError):
+    """Raised when a reference interval lacks the requested flanks."""
+
+
+def _flanks(sequence, start, end, width, minimum):
+    if not 0 <= start <= end <= len(sequence):
+        raise ValueError("interval is outside the reference sequence")
+    if width < 1:
+        raise ValueError("flank width must be positive")
+    left = sequence[max(0, start - width):start]
+    right = sequence[end:min(len(sequence), end + width)]
+    if len(left) < minimum or len(right) < minimum:
+        raise FlankError("reference does not contain complete flanking sequence")
+    return left, right
+
+
 def build_hr_dna(
     chromosome_sequence,
     start,
@@ -25,8 +41,13 @@ def build_hr_dna(
     sequence_complement,
 ):
     """Build the original HR oligos and joined flanks."""
-    previous_250 = chromosome_sequence[start - 250:start]
-    next_250 = chromosome_sequence[end:end + 250]
+    previous_250, next_250 = _flanks(
+        chromosome_sequence,
+        start,
+        end,
+        250,
+        80,
+    )
     forward = previous_250[-80:] + next_250[:20]
     reverse = (
         "".join(reversed(next_250[:80]))
@@ -317,15 +338,23 @@ def checking_primers(
     primer_designer=design_primers,
 ):
     """Design checking primers around a region."""
-    previous_sequence = chromosome_sequence[start - width:start]
-    next_sequence = chromosome_sequence[end:end + width]
+    previous_sequence, next_sequence = _flanks(
+        chromosome_sequence,
+        start,
+        end,
+        width,
+        80 + 18,
+    )
+    template_length = len(previous_sequence) + len(next_sequence)
     sequence_args = {
         "SEQUENCE_ID": "MH1000",
         "SEQUENCE_TEMPLATE": previous_sequence + next_sequence,
-        "SEQUENCE_INCLUDED_REGION": [0, 2 * width],
-        "SEQUENCE_EXCLUDED_REGION": [[width - 80, 160]],
+        "SEQUENCE_INCLUDED_REGION": [0, template_length],
+        "SEQUENCE_EXCLUDED_REGION": [[len(previous_sequence) - 80, 160]],
     }
-    global_args = _primer_settings((width - 75, 2 * width))
+    global_args = _primer_settings(
+        (min(width - 75, template_length), template_length)
+    )
 
     primer3_result = primer_designer(sequence_args, global_args)
     result_keys = (

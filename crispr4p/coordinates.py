@@ -27,15 +27,18 @@ def hit_coordinates(
     reverse_complement,
 ):
     """Convert an indexed PAM hit to checked reference coordinates."""
+    chromosome_length = len(chromosome_sequence)
     if hit_strand == 1:
         pam_start = hit_position
         pam_end = hit_position + 2
     elif hit_strand == -1:
-        chromosome_length = len(chromosome_sequence)
         pam_start = chromosome_length - hit_position - 1
         pam_end = chromosome_length - hit_position + 1
     else:
         raise ValueError("Oligo hit strand must be 1 or -1")
+
+    if pam_start < 1 or pam_end > chromosome_length:
+        raise ValueError("Normalized PAM coordinates fall outside the FASTA")
 
     reference_pam = chromosome_sequence[pam_start - 1:pam_end]
     if hit_strand == -1:

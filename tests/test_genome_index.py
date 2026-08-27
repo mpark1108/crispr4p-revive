@@ -9,6 +9,22 @@ ORIENTED_SITE = "A" + GUIDE + "GGG" + "A"
 
 
 class TestGenomePamIndex(unittest.TestCase):
+    def test_ignores_sites_without_a_complete_protospacer(self) -> None:
+        references = {
+            "record_start": "GG" + "A" * 30,
+            "near_start": "A" * 10 + "TGG" + "A" * 30,
+        }
+
+        for name, reference in references.items():
+            with self.subTest(name=name):
+                index = GenomePamIndex.build(
+                    {"synthetic": reference},
+                    hit_factory=NGG,
+                )
+
+                self.assertEqual(0, index.hit_count)
+                self.assertEqual(0, len(index))
+
     def test_preserves_overlapping_pams_on_both_strands(self) -> None:
         references = {
             1: ORIENTED_SITE,
