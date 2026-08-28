@@ -53,7 +53,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA = PROJECT_ROOT / "data"
 CANDIDATES = DATA / "stop_cassettes.json"
 FASTA = DATA / "Schizosaccharomyces_pombe.ASM294v2.26.dna.toplevel.fa"
-FIRST = "TGATGACGTGATGACCTAGTAGG"
+FIRST = "TGATGAGCTGATGACCTAGTAGG"
 OLD_FIRST = "TAGTAGCCTAGTGACCTAGTAGG"
 ADE6_GUIDE = "ACATTGGCTTACGACGGTCG"
 ADE6_REVERSE_GUIDE = "GTGGCGACAGGGACACCTCG"
@@ -93,7 +93,7 @@ class DisruptionDesignTests(unittest.TestCase):
         self.assertFalse(any(has_junction_pam(c.sequence) for c in self.cassettes))
         self.assertEqual(FIRST, self.cassettes[0].sequence)
         self.assertEqual(
-            "GTGATGAGTGATGACTAGTGAGG",
+            "GTGATAGCTGATGACTAGTGAGG",
             self.cassettes[-1].sequence,
         )
 
@@ -111,12 +111,12 @@ class DisruptionDesignTests(unittest.TestCase):
     def test_candidate_details(self):
         cassette = self.cassettes[0]
 
-        self.assertEqual("TGATGACGTGATGACCTAGT", cassette.guide)
+        self.assertEqual("TGATGAGCTGATGACCTAGT", cassette.guide)
         self.assertEqual("AGG", cassette.pam)
         self.assertEqual(45.0, cassette.gc_percent)
         self.assertEqual(3, len(cassette.frames))
         self.assertEqual(
-            "CCTACTAGGTCATCACGTCATCA",
+            "CCTACTAGGTCATCAGCTCATCA",
             cassette.orient("-"),
         )
         self.assertEqual(FIRST, cassette.orient("+"))
@@ -1244,7 +1244,7 @@ class DisruptionDesignTests(unittest.TestCase):
         self.assertEqual(10, len(cassettes["catalog"]))
         self.assertEqual(list(range(1, 11)), cassettes["choices"][0])
         self.assertEqual(
-            "TGA* TGA* CGT GAT GAC CTA GTA",
+            "TGA* TGA* GCT GAT GAC CTA GTA",
             cassettes["catalog"]["1"]["frames"][0],
         )
         self.assertEqual(80, arms[0]["arm_length"])
