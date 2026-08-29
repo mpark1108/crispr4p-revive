@@ -24,7 +24,7 @@ class RestorationDesignTests(unittest.TestCase):
         cassette = self.cassettes[0]
         forward, reverse = make_oligos(cassette.guide)
 
-        self.assertEqual("TGATGAGCTGATGACCTAGT", cassette.guide)
+        self.assertEqual("TGATGACGTGATGACCTAGT", cassette.guide)
         self.assertEqual("AGG", cassette.pam)
         self.assertEqual((17, 18), cassette.cut_bases)
         self.assertEqual(52, len(forward))
