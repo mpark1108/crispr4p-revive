@@ -176,7 +176,6 @@ class RestorationDesignTests(unittest.TestCase):
         self.assertEqual(160, donor["hr_product_length"])
 
         self.assertIn("Wild-Type Restoration Design", page)
-        self.assertIn('id="restoration_guide"', page)
         self.assertIn('id="restoration_sequence"', page)
         self.assertIn('id="restoration_hrfw"', page)
         self.assertIn('id="restoration_product_size"', page)

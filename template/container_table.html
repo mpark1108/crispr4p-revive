@@ -82,9 +82,6 @@
     <div class="l_field">Region surrounding deletion junction:</div><div class="r_field" id="deletion_junction">%(deleted_dna)s</div><br>
   </div>
 
-  <h3 id="spedit_header" class="toggle_header project_workflow_header" style="display: none;">
-    <button type="button" class="toggle_button" aria-expanded="false" aria-controls="spedit_oligos" onclick="toggle_interface(document.getElementById('spedit_oligos'), this)">SpEDIT Golden Gate Cloning Oligos</button>
-  </h3>
   <div id="spedit_oligos" class="workflow_section project_workflow" style="display: none;">
     <div class="l_field">Selected sgRNA:</div>
     <div class="r_field" id="spedit_guide"></div><br>
@@ -123,7 +120,8 @@
   <div id="stop_cassette_design" class="workflow_section project_workflow" style="display: none;">
     <div id="stop_cassette_status"></div>
     <div id="stop_cassette_content">
-    <h5>Disruption cassette</h5>
+    <details id="disruption_cassette_details" class="annotation_details">
+    <summary>Disruption cassette</summary>
     <div class="l_field">Cassette sequence (coding strand):</div><div class="r_field" id="stop_cassette_sequence"></div><br>
     <div class="l_field">Length:</div><div class="r_field" id="stop_cassette_length"></div><br>
     <div class="l_field">Rescue protospacer:</div><div class="r_field" id="rescue_protospacer"></div><br>
@@ -133,8 +131,10 @@
     <div class="l_field">Reading frame 1:</div><div class="r_field" id="stop_frame_0"></div><br>
     <div class="l_field">Reading frame 2:</div><div class="r_field" id="stop_frame_1"></div><br>
     <div class="l_field">Reading frame 3:</div><div class="r_field" id="stop_frame_2"></div><br>
+    </details>
 
-    <h5>Disruption donor</h5>
+    <details id="disruption_donor_details" class="annotation_details">
+    <summary>Disruption donor</summary>
     <div class="l_field">Homology arm length:</div><div class="r_field" id="donor_arm_length"></div><br>
     <div class="l_field">Left homology arm:</div><div class="r_field" id="donor_left_arm"></div><br>
     <div class="l_field field_break">Oriented cassette (forward):</div><div class="r_field" id="donor_insert"></div><br>
@@ -143,8 +143,9 @@
     <div class="l_field">Reverse complement:</div><div class="r_field" id="donor_reverse"></div><br>
     <div class="l_field">Cassette length:</div><div class="r_field" id="donor_cassette_length"></div><br>
     <div class="l_field">Total donor length:</div><div class="r_field" id="donor_total_length"></div><br>
+    </details>
 
-    <h5>HR-template construction oligos</h5>
+    <h5>HR-template construction oligos (insertion)</h5>
     <div class="l_field">HRfw:</div><div class="r_field" id="donor_hrfw"></div><br>
     <div class="l_field">HRrv:</div><div class="r_field" id="donor_hrrv"></div><br>
     <div class="l_field">Overlap sequence (forward):</div><div class="r_field" id="donor_hr_overlap"></div><br>
@@ -205,22 +206,22 @@
   <div id="wild_type_restoration" class="workflow_section project_workflow" style="display: none;">
     <div id="restoration_status" data-report-status></div>
     <div id="restoration_content">
-    <h5>Universal rescue guide</h5>
-    <div class="l_field">Protospacer:</div><div class="r_field" id="restoration_guide"></div><br>
-    <div class="l_field">PAM:</div><div class="r_field" id="restoration_pam"></div><br>
+    <h5>Rescue guide</h5>
     <div class="l_field">SpEDIT forward oligo, 52 nt:</div><div class="r_field" id="restoration_forward_oligo"></div><br>
     <div class="l_field">SpEDIT reverse oligo, 52 nt:</div><div class="r_field" id="restoration_reverse_oligo"></div><br>
     <div class="l_field">Internal BsaI site check:</div><div class="r_field" id="restoration_bsai"></div><br>
 
-    <h5>Restoration donor</h5>
+    <details id="restoration_donor_details" class="annotation_details">
+    <summary>Restoration donor</summary>
     <div class="l_field">Homology arm length:</div><div class="r_field" id="restoration_arm_length"></div><br>
     <div class="l_field">WT left homology arm:</div><div class="r_field" id="restoration_left_arm"></div><br>
     <div class="l_field">WT right homology arm:</div><div class="r_field" id="restoration_right_arm"></div><br>
     <div class="l_field">Complete donor (forward):</div><div class="r_field" id="restoration_sequence"></div><br>
     <div class="l_field">Reverse complement:</div><div class="r_field" id="restoration_reverse"></div><br>
     <div class="l_field">Total donor length:</div><div class="r_field" id="restoration_total_length"></div><br>
+    </details>
 
-    <h5>HR-template construction oligos</h5>
+    <h5>HR-template construction oligos (restoration)</h5>
     <div class="l_field">HRfw:</div><div class="r_field" id="restoration_hrfw"></div><br>
     <div class="l_field">HRrv:</div><div class="r_field" id="restoration_hrrv"></div><br>
     <div class="l_field">Overlap sequence (forward):</div><div class="r_field" id="restoration_hr_overlap"></div><br>
@@ -606,7 +607,6 @@
       var non_coding = annotation && annotation.coding_target === false;
       var content = document.getElementById("restoration_content");
       var fields = [
-        "restoration_guide", "restoration_pam",
         "restoration_forward_oligo", "restoration_reverse_oligo",
         "restoration_bsai", "restoration_arm_length",
         "restoration_left_arm", "restoration_right_arm",
@@ -627,9 +627,6 @@
         return;
       }
 
-      document.getElementById("restoration_guide").textContent =
-        "5'-" + cassette.guide + "-3'";
-      document.getElementById("restoration_pam").textContent = cassette.pam;
       document.getElementById("restoration_forward_oligo").textContent =
         "5'-" + cassette.spedit_forward + "-3'";
       document.getElementById("restoration_reverse_oligo").textContent =
@@ -713,19 +710,19 @@
     function update_vector() {
       var vector = selected_vector();
       var deletion_header = document.getElementById("deletion_header");
-      var spedit_header = document.getElementById("spedit_header");
+      var spedit_oligos = document.getElementById("spedit_oligos");
       var cassette_setup = document.getElementById("cassette_setup");
       var report = document.getElementById("design_report");
 
       hide_workflow("deletion_header", "deletion_design");
-      hide_workflow("spedit_header", "spedit_oligos");
+      spedit_oligos.style.display = "none";
       cassette_setup.style.display = "none";
       set_designs_visible(false);
 
       if (vector === "pMZ379") {
         deletion_header.style.display = "";
       } else if (vector === "pLSB") {
-        spedit_header.style.display = "";
+        spedit_oligos.style.display = "";
         cassette_setup.style.display = "";
         load_formats(selected_guide_number());
       }
