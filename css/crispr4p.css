@@ -353,6 +353,25 @@ border-width: 1px;
    margin-bottom: 20px;
 }
 
+.vector_choice {
+   background-color: #F7F7F7;
+   border: 1px solid #CCCCCC;
+   box-sizing: border-box;
+   margin: 12px 0 20px 0;
+   padding: 8px 12px 12px 12px;
+   width: 50%;
+}
+
+.vector_choice legend {
+   font-weight: bold;
+   padding: 0 5px;
+}
+
+.vector_choice label {
+   cursor: pointer;
+   margin-right: 16px;
+}
+
 .annotation_summary,
 .annotation_details {
    border-left: 4px solid #D1F0A6;

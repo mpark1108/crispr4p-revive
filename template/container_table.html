@@ -50,7 +50,13 @@
     <div id="cut_annotation_error" class="annotation_warning"></div>
   </div>
 
-  <h3 class="toggle_header">
+  <fieldset id="vector_choice" class="vector_choice">
+    <legend>Select Vector</legend>
+    <label><input type="radio" name="vector" value="pMZ379" onchange="update_vector();"> pMZ379</label>
+    <label><input type="radio" name="vector" value="pLSB" onchange="update_vector();"> pLSB</label>
+  </fieldset>
+
+  <h3 id="deletion_header" class="toggle_header" style="display: none;">
     <button type="button" class="toggle_button" aria-expanded="false" aria-controls="deletion_design" onclick="toggle_interface(document.getElementById('deletion_design'), this)">Deletion Design &mdash; Original CRISPR4P</button>
   </h3>
   <div id="deletion_design" class="workflow_section" style="display: none;">
@@ -76,8 +82,8 @@
     <div class="l_field">Region surrounding deletion junction:</div><div class="r_field" id="deletion_junction">%(deleted_dna)s</div><br>
   </div>
 
-  <h3 class="toggle_header project_workflow_header">
-    <button type="button" class="toggle_button" aria-expanded="false" aria-controls="spedit_oligos" onclick="toggle_interface(document.getElementById('spedit_oligos'), this)">SpEDIT/pLSB Golden Gate Cloning Oligos</button>
+  <h3 id="spedit_header" class="toggle_header project_workflow_header" style="display: none;">
+    <button type="button" class="toggle_button" aria-expanded="false" aria-controls="spedit_oligos" onclick="toggle_interface(document.getElementById('spedit_oligos'), this)">SpEDIT Golden Gate Cloning Oligos</button>
   </h3>
   <div id="spedit_oligos" class="workflow_section project_workflow" style="display: none;">
     <div class="l_field">Selected sgRNA:</div>
@@ -95,7 +101,7 @@
     <div id="spedit_error" class="annotation_warning" data-report-status></div>
   </div>
 
-  <div id="cassette_setup" class="workflow_section project_workflow">
+  <div id="cassette_setup" class="workflow_section project_workflow" style="display: none;">
     <div id="cassette_setup_status"></div>
     <div id="cassette_setup_content">
       <div class="l_field">Stop cassette:</div>
@@ -231,7 +237,7 @@
     </div>
   </div>
 
-  <div id="design_report" class="design_report">
+  <div id="design_report" class="design_report" style="display: none;">
     <h3>Copyable report</h3>
     <textarea id="report_text" readonly aria-label="Copyable design report"></textarea>
     <div class="report_actions">
@@ -670,6 +676,7 @@
     }
 
     function set_designs_visible(visible) {
+      visible = visible && selected_vector() === "pLSB";
       var stop_header = document.getElementById("stop_cassette_header");
       var restoration_header = document.getElementById("restoration_header");
       stop_header.style.display = visible ? "" : "none";
@@ -688,6 +695,43 @@
         stop_header.querySelector("button").setAttribute("aria-expanded", "true");
         designs_visible = true;
       }
+    }
+
+    function selected_vector() {
+      var selected = document.querySelector('input[name="vector"]:checked');
+      return selected ? selected.value : "";
+    }
+
+    function hide_workflow(header_id, section_id) {
+      var header = document.getElementById(header_id);
+      var section = document.getElementById(section_id);
+      header.style.display = "none";
+      section.style.display = "none";
+      header.querySelector("button").setAttribute("aria-expanded", "false");
+    }
+
+    function update_vector() {
+      var vector = selected_vector();
+      var deletion_header = document.getElementById("deletion_header");
+      var spedit_header = document.getElementById("spedit_header");
+      var cassette_setup = document.getElementById("cassette_setup");
+      var report = document.getElementById("design_report");
+
+      hide_workflow("deletion_header", "deletion_design");
+      hide_workflow("spedit_header", "spedit_oligos");
+      cassette_setup.style.display = "none";
+      set_designs_visible(false);
+
+      if (vector === "pMZ379") {
+        deletion_header.style.display = "";
+      } else if (vector === "pLSB") {
+        spedit_header.style.display = "";
+        cassette_setup.style.display = "";
+        load_formats(selected_guide_number());
+      }
+
+      report.style.display = vector ? "" : "none";
+      update_report();
     }
 
     function frame_profile(sequence, frame) {
@@ -813,14 +857,16 @@
         .then(function(formats) {
           format_cache[key] = formats;
           delete format_requests[key];
-          if (selected_guide_number() === index &&
+          if (selected_vector() === "pLSB" &&
+              selected_guide_number() === index &&
               cassette_menu.value === cassette.id.toString()) {
             show_formats(formats);
           }
         })
         .catch(function(error) {
           delete format_requests[key];
-          if (selected_guide_number() === index &&
+          if (selected_vector() === "pLSB" &&
+              selected_guide_number() === index &&
               cassette_menu.value === cassette.id.toString()) {
             format_menu.options.length = 0;
             format_menu.appendChild(new Option(error.message, ""));
@@ -836,7 +882,8 @@
       var cassette = cassette_catalog[cassette_menu.value] || null;
       var option = format_option();
       selected_format_id = option ? option.id : "";
-      if (index === null || !cassette || !option) {
+      if (selected_vector() !== "pLSB" ||
+          index === null || !cassette || !option) {
         set_designs_visible(false);
         update_donor(index || 0, null, null);
         update_restoration(index || 0, null);
@@ -1148,11 +1195,15 @@
 
     function build_report() {
       var lines = ["CRISPR4P-Revive Design"];
+      var vector = selected_vector();
 
       report_heading(lines, "QUERY");
       report_field(lines, "Name", "query_name");
       report_field(lines, "Chromosome", "query_chromosome");
       report_field(lines, "Coordinates", "query_coordinates");
+      if (vector) {
+        lines.push("Vector: " + vector);
+      }
 
       report_heading(lines, "SELECTED sgRNA AND CUT SITE");
       report_field(lines, "sgRNA", "selected_guide");
@@ -1167,28 +1218,31 @@
       report_field(lines, "Cas9 cut", "selected_cut");
 
       report_annotation(lines);
-      report_section(
-        lines,
-        "DELETION DESIGN — ORIGINAL CRISPR4P",
-        "deletion_design"
-      );
-      report_section(
-        lines,
-        "SpEDIT/pLSB GOLDEN GATE CLONING OLIGOS",
-        "spedit_oligos"
-      );
-
-      var cassette_format = document.getElementById("cassette_format_menu");
-      if (cassette_format && cassette_format.value) {
-        report_heading(lines, "STOP-CASSETTE DISRUPTION DESIGN");
-        report_menu(lines, "Stop cassette", "stop_cassette_menu");
-        report_menu(lines, "Cassette format", "cassette_format_menu");
-        report_section(lines, null, "stop_cassette_design");
+      if (vector === "pMZ379") {
         report_section(
           lines,
-          "WILD-TYPE RESTORATION DESIGN",
-          "wild_type_restoration"
+          "DELETION DESIGN — ORIGINAL CRISPR4P",
+          "deletion_design"
         );
+      } else if (vector === "pLSB") {
+        report_section(
+          lines,
+          "SpEDIT GOLDEN GATE CLONING OLIGOS",
+          "spedit_oligos"
+        );
+
+        var cassette_format = document.getElementById("cassette_format_menu");
+        if (cassette_format && cassette_format.value) {
+          report_heading(lines, "STOP-CASSETTE DISRUPTION DESIGN");
+          report_menu(lines, "Stop cassette", "stop_cassette_menu");
+          report_menu(lines, "Cassette format", "cassette_format_menu");
+          report_section(lines, null, "stop_cassette_design");
+          report_section(
+            lines,
+            "WILD-TYPE RESTORATION DESIGN",
+            "wild_type_restoration"
+          );
+        }
       }
 
       return lines.join("\n").trim() + "\n";
@@ -1246,7 +1300,11 @@
 
       update_annotation(index);
       update_spedit(index);
-      load_formats(index);
+      if (selected_vector() === "pLSB") {
+        load_formats(index);
+      } else {
+        set_designs_visible(false);
+      }
       update_report();
     }
 

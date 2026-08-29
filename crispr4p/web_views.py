@@ -443,7 +443,7 @@ def render_oligo(result: OligoAnalysisResult):
               <b>Mismatches Allowed</b>: {result.n_mismatch}<br>
               <hr>
 
-              <h4>SpEDIT/pLSB BsaI Golden Gate oligos</h4>
+              <h4>SpEDIT Golden Gate cloning oligos</h4>
 
               <b>Forward oligo, 52 nt, 5&#8242;&rarr;3&#8242;</b>:
               <code>{result.spedit_forward}</code><br>
