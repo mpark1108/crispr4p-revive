@@ -8,28 +8,23 @@
 </head>
 <body>
 <div id="header">
+	<!--
     <div style="text-align:left; margin-left:70px; margin-bottom:0px; margin-top:0px;"><span style="text-shadow:#FFF; font-family:'Arial Black', Gadget, sans-serif; font-size:32pt; color:#EBF1DE; ">b&auml;hler</span><span style="text-shadow:auto; font-family:'Arial Black', Gadget, sans-serif; font-size:32pt; color:#77933C; ">lab&#13;</span></div>
-    <div style="text-align:left; margin-left:30px; margin-top:0px;"><span style="font-family:'Arial Black', Gadget, sans-serif; font-size:20pt; color:#4F6228; ">Genome Regulation</span></div>
+    <div style="text-align:left; margin-left:30px; margin-top:0px;"><span style="font-family:'Arial Black', Gadget, sans-serif; font-size:20pt; color:#4F6228; ">Genome Regulation</span></div> -->
     <div class="O">
-        <div style="text-align:center; margin-bottom:0; margin-top:-26px; margin-left:120px;margin-right:-20px;"><span style="font-family:Arial, Helvetica, sans-serif; font-size:55pt; color:#D7E4BD; "><strong><em>CRISPR4P</em></strong></span></div>
-        <div style="text-align:right; margin-bottom:0px; margin-top:-127px; margin-left:150px;"><span style="font-family:'Arial Black', Helvetica, sans-serif; font-size:36pt; color:white; ">
-                <img src="/images/uclogo.gif";/></span></div>
+	    <div style="text-align:left; margin-left:20px; margin-bottom:0px; position:relative; top:25px;"><span style="font-family:'Arial Black', Gadget, sans-serif; font-size:45pt; color:#5D616F; "><strong><em>CRISPR4P</em> <em style="color:#DED6BB;">Revive</em></strong></span></div>
+    <!--
+    <div style="text-align:right; margin-bottom:0px; margin-top:-127px; margin-left:150px;"><span style="font-family:'Arial Black', Helvetica, sans-serif; font-size:36pt; color:white; ">
+       <img src="/images/uclogo.gif"/></span></div>
+    -->
     </div>
-</div>
-
-<div id="sidebar">
-    <div id="menu">
-        <ul>
-            <li><a href="http://bahlerlab.info/index.html" title="">Home</a></li>
-            <li><a href="http://bahlerlab.info/people" title="">People</a></li>
-            <li><a href="http://bahlerlab.info/research.htm" title="">Research</a></li>
-            <li><a href="http://bahlerlab.info/publications" title="">Publications</a></li>
-
-            <li class="active first"><a href="http://bahlerlab.info/resources" title="">Resources</a></li>
-
-            <li ><a href="http://bahlerlab.info/contact.html" title="">Contact</a></li>
-        </ul>
-    </div>
+    <details class="source_menu">
+      <summary>Source Code</summary>
+      <div class="source_menu_links">
+        <a href="https://github.com/Bahler-Lab/crispr4p" target="_blank" rel="noopener noreferrer">CRISPR4P</a>
+        <a href="https://github.com/mpark1108/crispr4p-revive" target="_blank" rel="noopener noreferrer">CRISPR4P Revive</a>
+      </div>
+    </details>
 </div>
 
 <script>
@@ -46,6 +41,21 @@ var toggle_interface=function(id, button){
         button.setAttribute("aria-expanded", expanded ? "false" : "true");
     }
 };
+
+document.addEventListener("click", function(event) {
+    var menu=document.querySelector(".source_menu");
+    if (menu && menu.open && !menu.contains(event.target)) {
+        menu.removeAttribute("open");
+    }
+});
+
+document.addEventListener("keydown", function(event) {
+    var menu=document.querySelector(".source_menu");
+    if (event.key === "Escape" && menu && menu.open) {
+        menu.removeAttribute("open");
+        menu.querySelector("summary").focus();
+    }
+});
 </script>
 
 <div id="content">
@@ -70,9 +80,13 @@ var toggle_interface=function(id, button){
 
 </div>
 
-</body>
 <footer>
-  <p><b>   More information about this tool: </b><a href="https://wellcomeopenresearch.org/articles/1-19/v1">https://wellcomeopenresearch.org/articles/1-19/v1</a></p>
-  <p><b>   How to cite:</b> Rodríguez-López M, Cotobal C, Fernández-Sánchez O et al. 2016 A CRISPR/Cas9-based method and primer design tool for seamless genome editing in fission yeast. Wellcome Open Res 2016, 1:19 (doi: 10.12688/wellcomeopenres.10038.1)</p>
+  <p><b>CRISPR4P: </b><a href="https://wellcomeopenresearch.org/articles/1-19/v1">https://wellcomeopenresearch.org/articles/1-19/v1</a></p>
+  <p><b>Citation: </b>Rodríguez-López M, Cotobal C, Fernández-Sánchez O et al. 2016 A CRISPR/Cas9-based method and primer design tool for seamless genome editing in fission yeast. Wellcome Open Res 2016, 1:19 (doi: 10.12688/wellcomeopenres.10038.1)</p>
+  <p class="spedit_reference">
+    <b>SpEDIT method: </b><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC7721064/">https://pmc.ncbi.nlm.nih.gov/articles/PMC7721064/</a></p>
+  <p><b>Citation: </b>Torres-Garcia S, Di Pompeo L, Eivers L, Gaborieau B, White SA, Pidoux AL, Kanigowska P, Yaseen I, Cai Y, Allshire RC. SpEDIT: A fast and efficient CRISPR/Cas9 method for fission yeast. Wellcome Open Res. 2020 Nov 24;5:274. doi: 10.12688/wellcomeopenres.16405.1. PMID: 33313420; PMCID: PMC7721064.</p>
+
 </footer>
+</body>
     </html>
