@@ -56,9 +56,11 @@ The repository includes the *S. pombe* ASM294v2.26 reference genome and packaged
 python -m unittest discover -s tests -v
 ```
 
-## Original CRISPR4P
+## License
 
-This project is derived from the original [Bähler Lab CRISPR4P](https://github.com/Bahler-Lab/crispr4p).
+CRISPR4P Revive is distributed under the MIT License. See [LICENSE](LICENSE).  
+
+This project is derived from the original [Bähler Lab CRISPR4P](https://github.com/Bahler-Lab/crispr4p) software developed by Rodríguez-López, Fernández-Sánchez, and colleagues. The original CRISPR4P publication identifies the software as MIT-Licensed.
 
 Rodríguez-López M, Cotobal C, Fernández-Sánchez O, et al.
 “A CRISPR/Cas9-based method and primer design tool for seamless genome
@@ -67,8 +69,6 @@ editing in fission yeast.” *Wellcome Open Research*. 2017;1:19.
 - [Journal article](https://wellcomeopenresearch.org/articles/1-19)
 - [DOI: 10.12688/wellcomeopenres.10038.3](https://doi.org/10.12688/wellcomeopenres.10038.3)
 - [![DOI](https://zenodo.org/badge/45244871.svg)](https://zenodo.org/badge/latestdoi/45244871)
-
-The original publication identifies CRISPR4P software as MIT-licensed.
 
 ## Related method
 
