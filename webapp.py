@@ -31,10 +31,6 @@ DONOR_ARM_LENGTH = 80
 CASSETTE_LENGTH = 23
 PRIMER_WINDOW = 300
 NEB_LINKS = {
-    "AscI": (
-        "https://www.neb.com/en-us/products/r0558-asci",
-        "https://nebcloner.neb.com/#!/protocol/re/single/AscI",
-    ),
     "PacI": (
         "https://www.neb.com/en-us/products/r0547-paci",
         "https://nebcloner.neb.com/#!/protocol/re/single/PacI",

@@ -155,14 +155,6 @@ class CassetteFormat:
 CASSETTE_FORMATS = (
     CassetteFormat("none", "23 nt — no diagnostic site"),
     CassetteFormat(
-        "asci",
-        "29 nt — AscI",
-        tail="CGCGCC",
-        enzyme="AscI",
-        site="GGCGCGCC",
-        cut_offset=2,
-    ),
-    CassetteFormat(
         "paci",
         "31 nt — PacI",
         tail="TTAATTAA",

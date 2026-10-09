@@ -1,5 +1,6 @@
 import json
 import unittest
+from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -124,7 +125,6 @@ class DisruptionDesignTests(unittest.TestCase):
     def test_cassette_formats(self):
         expected = {
             "none": (23, None, None, None),
-            "asci": (29, "AscI", "GGCGCGCC", 2),
             "paci": (31, "PacI", "TTAATTAA", 5),
             "swai": (31, "SwaI", "ATTTAAAT", 4),
         }
@@ -153,7 +153,6 @@ class DisruptionDesignTests(unittest.TestCase):
         cassette = self.cassettes[0]
         expected = {
             "none": (183, 103, 103),
-            "asci": (189, 103, 109),
             "paci": (191, 103, 111),
             "swai": (191, 103, 111),
         }
@@ -524,8 +523,8 @@ class DisruptionDesignTests(unittest.TestCase):
             "PRIMER_RIGHT_0_TM": 59.1,
             "PRIMER_PAIR_0_PRODUCT_SIZE": 1,
         }
-        asci = cassette_format("asci")
-        full_insert = asci.sequence(self.cassettes[0])
+        paci = cassette_format("paci")
+        full_insert = paci.sequence(self.cassettes[0])
         designer = Mock(side_effect=(spanning, checked, checked))
 
         checks = insertion_checks(
@@ -538,14 +537,14 @@ class DisruptionDesignTests(unittest.TestCase):
         left_args, left_settings = designer.call_args_list[1].args
         right_args, right_settings = designer.call_args_list[2].args
 
-        self.assertEqual(327, checks.spanning.disrupted_product_size)
+        self.assertEqual(329, checks.spanning.disrupted_product_size)
         self.assertEqual(
             reverse_complement(FIRST),
             left_args["SEQUENCE_PRIMER_REVCOMP"],
         )
         self.assertEqual(FIRST, right_args["SEQUENCE_PRIMER"])
         self.assertEqual([[193, 193]], left_settings["PRIMER_PRODUCT_SIZE_RANGE"])
-        self.assertEqual([[157, 157]], right_settings["PRIMER_PRODUCT_SIZE_RANGE"])
+        self.assertEqual([[159, 159]], right_settings["PRIMER_PRODUCT_SIZE_RANGE"])
 
         reverse_insert = reverse_complement(full_insert)
         reverse_core = reverse_complement(FIRST)
@@ -560,7 +559,7 @@ class DisruptionDesignTests(unittest.TestCase):
         reverse_left = reverse_designer.call_args_list[1].args[1]
         reverse_right = reverse_designer.call_args_list[2].args[1]
         self.assertEqual(
-            [[199, 199]],
+            [[201, 201]],
             reverse_left["PRIMER_PRODUCT_SIZE_RANGE"],
         )
         self.assertEqual(
@@ -575,35 +574,35 @@ class DisruptionDesignTests(unittest.TestCase):
             forward_tm=59.4,
             reverse_tm=60.2,
             wt_product_size=298,
-            insert_length=29,
+            insert_length=31,
             forward_start=130,
             reverse_end=427,
         )
-        asci = cassette_format("asci")
-        insert = asci.sequence(self.cassettes[0])
+        paci = cassette_format("paci")
+        insert = paci.sequence(self.cassettes[0])
         result = pcr_rflp(
             "A" * 300 + "C" * 300,
             (300, 301),
             insert,
             pair,
-            asci,
+            paci,
         )
 
         self.assertTrue(result.available)
         self.assertEqual((), result.wt_sites)
-        self.assertEqual((191,), result.edited_sites)
-        self.assertEqual((193, 134), result.fragments)
+        self.assertEqual((193,), result.edited_sites)
+        self.assertEqual((198, 131), result.fragments)
         self.assertEqual((0, 4), find_sites("TTAATTAATTAA", "TTAATTAA"))
         self.assertEqual((60, 40), digest_fragments(100, (38,), 2))
 
         reference = list("A" * 300 + "C" * 300)
-        reference[200:208] = asci.site
+        reference[200:208] = paci.site
         conflict = pcr_rflp(
             "".join(reference),
             (300, 301),
             insert,
             pair,
-            asci,
+            paci,
         )
         self.assertFalse(conflict.available)
         self.assertEqual(1, len(conflict.wt_sites))
@@ -692,19 +691,18 @@ class DisruptionDesignTests(unittest.TestCase):
             "+",
         )
 
-        self.assertEqual(("none", "asci", "paci", "swai"), tuple(
+        self.assertEqual(("none", "paci", "swai"), tuple(
             option.cassette_format.id for option in options
         ))
         self.assertTrue(all(option.available for option in options))
-        self.assertEqual((321, 327, 329, 329), tuple(
+        self.assertEqual((321, 329, 329), tuple(
             option.spanning.disrupted_product_size for option in options
         ))
-        self.assertEqual((151, 157, 159, 159), tuple(
+        self.assertEqual((151, 159, 159), tuple(
             option.checks.right.product_size for option in options
         ))
-        self.assertEqual((193, 134), options[1].digest.fragments)
-        self.assertEqual((198, 131), options[2].digest.fragments)
-        self.assertEqual((197, 132), options[3].digest.fragments)
+        self.assertEqual((198, 131), options[1].digest.fragments)
+        self.assertEqual((197, 132), options[2].digest.fragments)
 
         reverse_guide = service.design_gene("bub1").guides[0]
         reverse_options = service.cassette_options(
@@ -714,10 +712,10 @@ class DisruptionDesignTests(unittest.TestCase):
             1,
             "-",
         )
-        self.assertEqual((197, 203, 205, 205), tuple(
+        self.assertEqual((197, 205, 205), tuple(
             option.checks.left.product_size for option in reverse_options
         ))
-        self.assertEqual((123, 123, 123, 123), tuple(
+        self.assertEqual((123, 123, 123), tuple(
             option.checks.right.product_size for option in reverse_options
         ))
 
@@ -729,13 +727,13 @@ class DisruptionDesignTests(unittest.TestCase):
             "+",
         )
         self.assertEqual(
-            (True, True, False, True),
+            (True, False, True),
             tuple(option.available for option in paci_conflict),
         )
+        self.assertEqual(0, len(paci_conflict[1].digest.wt_sites))
+        self.assertEqual(2, len(paci_conflict[1].digest.edited_sites))
         self.assertEqual(0, len(paci_conflict[2].digest.wt_sites))
-        self.assertEqual(2, len(paci_conflict[2].digest.edited_sites))
-        self.assertEqual(0, len(paci_conflict[3].digest.wt_sites))
-        self.assertEqual(1, len(paci_conflict[3].digest.edited_sites))
+        self.assertEqual(1, len(paci_conflict[2].digest.edited_sites))
 
         swai_conflict = service.cassette_options(
             "I",
@@ -745,12 +743,12 @@ class DisruptionDesignTests(unittest.TestCase):
             "-",
         )
         self.assertEqual(
-            (True, True, False, False),
+            (True, False, False),
             tuple(option.available for option in swai_conflict),
         )
-        self.assertEqual(0, len(swai_conflict[3].digest.wt_sites))
-        self.assertEqual(2, len(swai_conflict[3].digest.edited_sites))
-        self.assertEqual((151, 143, 6), swai_conflict[3].digest.fragments)
+        self.assertEqual(0, len(swai_conflict[2].digest.wt_sites))
+        self.assertEqual(2, len(swai_conflict[2].digest.edited_sites))
+        self.assertEqual((151, 143, 6), swai_conflict[2].digest.fragments)
 
     def test_atg7_primer_fallbacks(self):
         service = Crispr4pService.from_project_data()
@@ -921,9 +919,9 @@ class DisruptionDesignTests(unittest.TestCase):
             forward_tm=59.4,
             reverse_tm=60.2,
             wt_product_size=298,
-            insert_length=29,
+            insert_length=23,
         )
-        asci = cassette_format("asci")
+        paci = cassette_format("paci")
         options = (
             CassetteOption(
                 cassette_format=NO_DIAGNOSTIC,
@@ -935,18 +933,18 @@ class DisruptionDesignTests(unittest.TestCase):
                 digest=None,
             ),
             CassetteOption(
-                cassette_format=asci,
-                coding_sequence=asci.sequence(self.cassettes[0]),
-                insert=asci.sequence(self.cassettes[0]),
+                cassette_format=paci,
+                coding_sequence=paci.sequence(self.cassettes[0]),
+                insert=paci.sequence(self.cassettes[0]),
                 available=True,
-                spanning=pair,
+                spanning=replace(pair, insert_length=31),
                 checks=None,
                 digest=DigestResult(
-                    enzyme="AscI",
-                    site="GGCGCGCC",
+                    enzyme="PacI",
+                    site="TTAATTAA",
                     wt_sites=(),
-                    edited_sites=(191,),
-                    fragments=(193, 134),
+                    edited_sites=(193,),
+                    fragments=(198, 131),
                 ),
             ),
         )
@@ -978,16 +976,16 @@ class DisruptionDesignTests(unittest.TestCase):
             window=300,
         )
         payload = json.loads(handler.wfile.getvalue())
-        self.assertEqual(("none", "asci"), tuple(
+        self.assertEqual(("none", "paci"), tuple(
             row["id"] for row in payload["formats"]
         ))
-        self.assertEqual([193, 134], payload["formats"][1]["digest"]["fragments"])
+        self.assertEqual([198, 131], payload["formats"][1]["digest"]["fragments"])
         self.assertEqual(0, payload["formats"][1]["digest"]["wt_site_count"])
         self.assertTrue(payload["formats"][1]["available"])
         self.assertIsNone(payload["formats"][0]["product_url"])
         self.assertIsNone(payload["formats"][0]["protocol_url"])
         self.assertEqual(
-            webapp.NEB_LINKS["AscI"],
+            webapp.NEB_LINKS["PacI"],
             (
                 payload["formats"][1]["product_url"],
                 payload["formats"][1]["protocol_url"],
