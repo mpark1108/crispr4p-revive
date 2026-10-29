@@ -1,3 +1,8 @@
+import json
+import os
+import subprocess
+import sys
+import tempfile
 import unittest
 import urllib.parse
 from io import BytesIO
@@ -193,6 +198,7 @@ class TestWebHandler(unittest.TestCase):
             webapp.create_service.cache_clear()
 
         self.assertIs(first, second)
+        self.assertEqual(first.precomputed_folder, str(PROJECT_ROOT / "precomputed"))
 
     def test_gene_design_calls_each_workflow_service(self) -> None:
         service = self.service()
@@ -321,6 +327,109 @@ class TestHttpPost(unittest.TestCase):
             "Please fill either Name, Coordinates, or Oligo Sequence",
             handler.serve_form.call_args.args[0],
         )
+
+
+class TestCGI(unittest.TestCase):
+    def request(self, method="GET", query="", body=b"", **environ):
+        settings = {
+            "REQUEST_METHOD": method,
+            "QUERY_STRING": query,
+            "CONTENT_LENGTH": str(len(body)),
+            **environ,
+        }
+        output = BytesIO()
+        webapp.CGIHandler(settings, BytesIO(body), output).run()
+        return self.response(output.getvalue())
+
+    def response(self, output):
+        headers, body = output.split(b"\r\n\r\n", 1)
+        headers = dict(
+            line.split(": ", 1) for line in headers.decode("latin-1").split("\r\n")
+        )
+        return headers, body
+
+    def test_entry_point_from_other_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for endpoint, content_type in (("", "text/html"), ("css", "text/css")):
+                with self.subTest(endpoint=endpoint):
+                    result = subprocess.run(
+                        [sys.executable, "-B", str(PROJECT_ROOT / "webapp.py")],
+                        env={
+                            **os.environ,
+                            "GATEWAY_INTERFACE": "CGI/1.1",
+                            "REQUEST_METHOD": "GET",
+                            "SCRIPT_NAME": "/cgi-bin/crispr4p/webapp.py",
+                            "PATH_INFO": "",
+                            "QUERY_STRING": "endpoint=" + endpoint,
+                        },
+                        cwd=directory,
+                        input=b"",
+                        capture_output=True,
+                        timeout=15,
+                        check=True,
+                    )
+                    headers, body = self.response(result.stdout)
+                    self.assertEqual(headers["Status"], "200 OK")
+                    self.assertTrue(headers["Content-type"].startswith(content_type))
+                    self.assertTrue(body)
+                    self.assertEqual(result.stderr, b"")
+                    if endpoint == "css":
+                        self.assertEqual(body, (PROJECT_ROOT / "css/crispr4p.css").read_bytes())
+
+    def test_form_uses_cgi_stdin(self):
+        with patch.object(webapp.WebHandler, "run_design_model", return_value="RESULT") as design:
+            headers, body = self.request("POST", body=b"name=ade6")
+
+        design.assert_called_once_with("ade6", None, None, None)
+        self.assertEqual(headers["Status"], "200 OK")
+        self.assertIn(b"RESULT", body)
+
+    def test_json_endpoints(self):
+        params = {
+            "chromosome": "III", "cut_left": 1316791, "cut_right": 1316792,
+            "guide": GUIDE, "cassette_id": 1, "coding_strand": "+",
+        }
+        service = Mock()
+        service.cassette_options.return_value = ()
+        service.insertion_primers.side_effect = webapp.PrimerNotFoundError()
+        with patch.object(webapp, "create_service", return_value=service):
+            headers, body = self.request(query=urllib.parse.urlencode(
+                {"endpoint": "cassette-options", **params}
+            ))
+            self.assertEqual(headers["Status"], "200 OK")
+            self.assertEqual(json.loads(body), {"formats": []})
+            service.cassette_options.assert_called_once_with(
+                "III", (1316791, 1316792), GUIDE, 1, "+", arm_length=80, window=300
+            )
+
+            headers, body = self.request(query=(
+                "endpoint=insertion-primers&chromosome=III&cut_left=1316791&cut_right=1316792"
+            ))
+            self.assertTrue(headers["Status"].startswith("422 "))
+            self.assertIn("error", json.loads(body))
+            headers, body = self.request(query="endpoint=cassette-options")
+            self.assertTrue(headers["Status"].startswith("400 "))
+            self.assertIn("error", json.loads(body))
+
+    def test_bad_requests(self):
+        cases = (
+            ({"method": "POST", "CONTENT_LENGTH": "-1"}, 400),
+            ({"method": "POST", "CONTENT_LENGTH": "invalid"}, 400),
+            ({"method": "POST", "CONTENT_LENGTH": "10", "body": b"short"}, 400),
+            ({"method": "POST", "body": b"\xff"}, 400),
+            ({"method": "POST", "CONTENT_LENGTH": str(webapp.MAX_FORM_SIZE + 1)}, 413),
+            ({"method": "POST", "CONTENT_TYPE": "multipart/form-data"}, 415),
+            ({"method": "PUT"}, 405),
+            ({"query": "endpoint=missing"}, 404),
+            ({"PATH_INFO": "/missing"}, 404),
+        )
+        with patch.object(webapp, "create_service") as service:
+            for request, status in cases:
+                with self.subTest(request=request):
+                    headers, body = self.request(**request)
+                    self.assertTrue(headers["Status"].startswith(f"{status} "))
+                    self.assertEqual(int(headers["Content-Length"]), len(body))
+            service.assert_not_called()
 
 
 if __name__ == "__main__":

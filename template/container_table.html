@@ -842,7 +842,7 @@
         cassette_id: cassette.id,
         coding_strand: annotation.coding_strand
       });
-      fetch("/cassette-options?" + params.toString(), {cache: "no-store"})
+      fetch("webapp.py?endpoint=cassette-options&" + params.toString(), {cache: "no-store"})
         .then(function(response) {
           return response.json().then(function(data) {
             if (!response.ok) {

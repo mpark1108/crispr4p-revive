@@ -46,6 +46,30 @@ python webapp.py
 
 Then open [http://localhost:8080](http://localhost:8080).
 
+### Apache CGI hosting
+
+`webapp.py` runs as CGI when invoked by Apache. Running `python webapp.py`
+directly starts the local preview server instead.
+
+Configure an executable CGI wrapper named `webapp.py` to use the project's
+virtual-environment Python, adjusting these paths to the installation:
+
+```sh
+#!/bin/sh
+exec /path/to/crispr4p-revive/.venv/bin/python /path/to/crispr4p-revive/webapp.py
+```
+
+Serve `css/` as static files beside `webapp.py` in the public URL. Expose
+only the CGI entry point and CSS, not the entire checkout.
+
+The CGI account needs read access to the application, reference data, and
+templates, and write access to `precomputed/`. This pickle cache must not
+be writable by untrusted users.
+
+The hosting administrator configures CGI execution, directory/SELinux
+permissions, HTTPS, and service startup. See the
+[Apache CGI guide](https://httpd.apache.org/docs/2.4/howto/cgi.html).
+
 ## Reference data
 
 The repository includes the *S. pombe* ASM294v2.26 reference genome and packaged PomBase gene-name, annotation, and gene-viability snapshots. Additional info in [`data/POMBASE_DATA.md`](data/POMBASE_DATA.md).

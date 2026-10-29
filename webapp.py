@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-# Local CRISPR4P web server
+# CGI entry point and local preview server.
 
 import json
 import os
 import urllib.parse
 import sys
 from functools import lru_cache
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from html import escape
+from http import HTTPStatus
 
 from crispr4p.service import (
     AmbiguousGeneNameError,
@@ -27,6 +28,8 @@ from crispr4p.web_views import (
 
 
 PORT = 8080
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+MAX_FORM_SIZE = 64 * 1024
 DONOR_ARM_LENGTH = 80
 CASSETTE_LENGTH = 23
 PRIMER_WINDOW = 300
@@ -75,25 +78,28 @@ def primer_payload(pair, checks=None):
 def create_service():
     """Create the shared application service."""
     return Crispr4pService.from_project_data(
-        precomputed_folder="precomputed",
+        precomputed_folder=os.path.join(PROJECT_DIR, "precomputed"),
     )
 
 
-class CRISPR4PHandler(BaseHTTPRequestHandler):
+class WebHandler:
     def do_GET(self):
         parsed_path = urllib.parse.urlparse(self.path)
         path = parsed_path.path
+        query = urllib.parse.parse_qs(parsed_path.query)
 
-        if path == "/" or path == "/index.html" or path == "/webapp.py":
+        # Query endpoints also work when Apache mounts only the CGI script.
+        if path in ("/", "/index.html", "/webapp.py"):
+            path = "/" + query.get("endpoint", [""])[0]
+
+        if path == "/":
             self.serve_form()
         elif path == "/insertion-primers":
-            self.serve_insertion_primers(
-                urllib.parse.parse_qs(parsed_path.query)
-            )
+            self.serve_insertion_primers(query)
         elif path == "/cassette-options":
-            self.serve_cassette_options(
-                urllib.parse.parse_qs(parsed_path.query)
-            )
+            self.serve_cassette_options(query)
+        elif path == "/css":
+            self.serve_css("crispr4p.css")
         elif path.startswith("/css/"):
             self.serve_css(path)
         else:
@@ -109,11 +115,8 @@ class CRISPR4PHandler(BaseHTTPRequestHandler):
             self.send_error(404, "File not found")
 
     def serve_form(self, result_content=""):
-        src_path = os.path.dirname(__file__)
-        src_path = "." if src_path == "" else src_path
-
         try:
-            template_path = os.path.join(src_path, 'template/bahler_template.html')
+            template_path = os.path.join(PROJECT_DIR, 'template/bahler_template.html')
             with open(template_path, 'r', encoding='utf-8') as fh:
                 template_file = fh.read()
             
@@ -128,10 +131,8 @@ class CRISPR4PHandler(BaseHTTPRequestHandler):
             self.send_error(500, f"Error reading templates: {err}")
 
     def serve_css(self, path):
-        src_path = os.path.dirname(__file__)
-        src_path = "." if src_path == "" else src_path
         filename = os.path.basename(path)
-        css_file = os.path.join(src_path, "css", filename)
+        css_file = os.path.join(PROJECT_DIR, "css", filename)
         if os.path.exists(css_file):
             try:
                 with open(css_file, 'r', encoding='utf-8') as f:
@@ -256,8 +257,30 @@ class CRISPR4PHandler(BaseHTTPRequestHandler):
         self.serve_json({"formats": rows})
 
     def process_post(self):
-        content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length).decode('utf-8')
+        content_type = self.headers.get(
+            "Content-Type", "application/x-www-form-urlencoded"
+        ).split(";", 1)[0].strip().lower()
+        if content_type != "application/x-www-form-urlencoded":
+            self.send_error(415, "Expected a URL-encoded form")
+            return
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length < 0:
+                raise ValueError
+        except ValueError:
+            self.send_error(400, "Invalid Content-Length")
+            return
+        if content_length > MAX_FORM_SIZE:
+            self.send_error(413, "Form is too large")
+            return
+        try:
+            body = self.rfile.read(content_length)
+            if len(body) != content_length:
+                raise ValueError
+            post_data = body.decode('utf-8')
+        except ValueError:
+            self.send_error(400, "Invalid form body")
+            return
         params = urllib.parse.parse_qs(post_data)
 
         name = params.get('name', [None])[0]
@@ -337,8 +360,7 @@ class CRISPR4PHandler(BaseHTTPRequestHandler):
             result.name,
         )
 
-        src_path = os.path.dirname(__file__) if os.path.dirname(__file__) else '.'
-        with open(os.path.join(src_path, 'template/container_table.html'), 'r', encoding='utf-8') as fh:
+        with open(os.path.join(PROJECT_DIR, 'template/container_table.html'), 'r', encoding='utf-8') as fh:
             template_file = fh.read()
 
         return render_design(
@@ -351,7 +373,62 @@ class CRISPR4PHandler(BaseHTTPRequestHandler):
         )
 
 
+if "GATEWAY_INTERFACE" not in os.environ:
+    # Apache handles HTTP itself; this is only needed for local preview.
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+
+    class CRISPR4PHandler(WebHandler, BaseHTTPRequestHandler):
+        pass
+
+
+class CGIHandler(WebHandler):
+    def __init__(self, environ, stdin, stdout):
+        self.command = environ.get("REQUEST_METHOD", "GET")
+        self.path = "/webapp.py" + environ.get("PATH_INFO", "")
+        self.path += "?" + environ.get("QUERY_STRING", "")
+        self.headers = {
+            "Content-Length": environ.get("CONTENT_LENGTH", "0"),
+            "Content-Type": environ.get(
+                "CONTENT_TYPE", "application/x-www-form-urlencoded"
+            ),
+        }
+        self.rfile = stdin
+        self.wfile = stdout
+
+    def run(self):
+        if self.command == "GET":
+            self.do_GET()
+        elif self.command == "POST":
+            self.do_POST()
+        else:
+            self.send_error(405, "Method not allowed")
+
+    def send_response(self, status):
+        self.send_header("Status", f"{status} {HTTPStatus(status).phrase}")
+
+    def send_header(self, name, value):
+        self.wfile.write(f"{name}: {value}\r\n".encode("latin-1"))
+
+    def end_headers(self):
+        self.wfile.write(b"\r\n")
+
+    def send_error(self, status, message):
+        content = f"<h1>{status}</h1><p>{escape(message)}</p>".encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        if status == 405:
+            self.send_header("Allow", "GET, POST")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(content)
+
+
 def main():
+    if "GATEWAY_INTERFACE" in os.environ:
+        CGIHandler(os.environ, sys.stdin.buffer, sys.stdout.buffer).run()
+        return
+
     server_address = ('', PORT)
     httpd = HTTPServer(server_address, CRISPR4PHandler)
     print(f"Starting local server on http://localhost:{PORT} ...")
