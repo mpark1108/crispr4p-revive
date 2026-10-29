@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# CGI entry point and local preview server.
+# Web entry points and local preview server.
 
 import json
 import os
@@ -8,6 +8,7 @@ import sys
 from functools import lru_cache
 from html import escape
 from http import HTTPStatus
+from io import BytesIO
 
 from crispr4p.service import (
     AmbiguousGeneNameError,
@@ -381,10 +382,10 @@ if "GATEWAY_INTERFACE" not in os.environ:
         pass
 
 
-class CGIHandler(WebHandler):
+class RequestHandler(WebHandler):
     def __init__(self, environ, stdin, stdout):
         self.command = environ.get("REQUEST_METHOD", "GET")
-        self.path = "/webapp.py" + environ.get("PATH_INFO", "")
+        self.path = environ.get("PATH_INFO") or "/"
         self.path += "?" + environ.get("QUERY_STRING", "")
         self.headers = {
             "Content-Length": environ.get("CONTENT_LENGTH", "0"),
@@ -403,15 +404,6 @@ class CGIHandler(WebHandler):
         else:
             self.send_error(405, "Method not allowed")
 
-    def send_response(self, status):
-        self.send_header("Status", f"{status} {HTTPStatus(status).phrase}")
-
-    def send_header(self, name, value):
-        self.wfile.write(f"{name}: {value}\r\n".encode("latin-1"))
-
-    def end_headers(self):
-        self.wfile.write(b"\r\n")
-
     def send_error(self, status, message):
         content = f"<h1>{status}</h1><p>{escape(message)}</p>".encode("utf-8")
         self.send_response(status)
@@ -422,6 +414,48 @@ class CGIHandler(WebHandler):
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(content)
+
+
+class CGIHandler(RequestHandler):
+    def __init__(self, environ, stdin, stdout):
+        super().__init__(environ, stdin, stdout)
+        self.path = "/webapp.py" + environ.get("PATH_INFO", "")
+        self.path += "?" + environ.get("QUERY_STRING", "")
+
+    def send_response(self, status):
+        self.send_header("Status", f"{status} {HTTPStatus(status).phrase}")
+
+    def send_header(self, name, value):
+        self.wfile.write(f"{name}: {value}\r\n".encode("latin-1"))
+
+    def end_headers(self):
+        self.wfile.write(b"\r\n")
+
+
+class WSGIHandler(RequestHandler):
+    def __init__(self, environ):
+        super().__init__(environ, environ["wsgi.input"], BytesIO())
+        self.response_headers = []
+
+    def send_response(self, status):
+        self.status = f"{status} {HTTPStatus(status).phrase}"
+
+    def send_header(self, name, value):
+        self.response_headers.append((name, str(value)))
+
+    def end_headers(self):
+        pass
+
+
+def application(environ, start_response):
+    """WSGI entry point; Gunicorn workers retain their application service."""
+    handler = WSGIHandler(environ)
+    handler.run()
+    body = handler.wfile.getvalue()
+    if not any(name.lower() == "content-length" for name, _ in handler.response_headers):
+        handler.send_header("Content-Length", len(body))
+    start_response(handler.status, handler.response_headers)
+    return [body]
 
 
 def main():

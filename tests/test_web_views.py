@@ -8,6 +8,8 @@ import urllib.parse
 from io import BytesIO
 from pathlib import Path
 from unittest.mock import Mock, patch
+from wsgiref.util import setup_testing_defaults
+from wsgiref.validate import validator
 
 import webapp
 from crispr4p.annotations import AmbiguousGeneNameError, GenomeAnnotations
@@ -430,6 +432,62 @@ class TestCGI(unittest.TestCase):
                     self.assertTrue(headers["Status"].startswith(f"{status} "))
                     self.assertEqual(int(headers["Content-Length"]), len(body))
             service.assert_not_called()
+
+
+class TestWSGI(unittest.TestCase):
+    def test_request_routing_and_wsgi_contract(self):
+        cases = (
+            ("GET", "/", b"", {}, 200),
+            ("GET", "/css/crispr4p.css", b"", {}, 200),
+            ("POST", "/webapp.py", b"name=ade6", {}, 200),
+            ("POST", "/webapp.py", b"name=ura4", {}, 200),
+            ("GET", "/webapp.py", b"", {"QUERY_STRING": "endpoint=cassette-options"}, 400),
+            ("POST", "/webapp.py", b"short", {"CONTENT_LENGTH": "10"}, 400),
+            ("POST", "/webapp.py", b"", {"CONTENT_LENGTH": str(webapp.MAX_FORM_SIZE + 1)}, 413),
+            ("PUT", "/", b"", {}, 405),
+            ("HEAD", "/", b"", {}, 405),
+            ("GET", "/missing", b"", {}, 404),
+        )
+        with patch.object(webapp.WebHandler, "run_design_model", side_effect=("ADE6 RESULT", "URA4 RESULT")) as design:
+            for method, path, payload, overrides, expected in cases:
+                with self.subTest(method=method, path=path, overrides=overrides):
+                    environ = {}
+                    setup_testing_defaults(environ)
+                    environ.update({
+                        "REQUEST_METHOD": method,
+                        "SCRIPT_NAME": "/crispr4p",
+                        "PATH_INFO": path,
+                        "QUERY_STRING": "",
+                        "CONTENT_TYPE": "application/x-www-form-urlencoded",
+                        "CONTENT_LENGTH": str(len(payload)),
+                        "wsgi.input": BytesIO(payload),
+                        **overrides,
+                    })
+                    start_response = Mock()
+                    response = validator(webapp.application)(environ, start_response)
+                    try:
+                        body = b"".join(response)
+                    finally:
+                        response.close()
+                    status, headers = start_response.call_args.args
+                    self.assertEqual(expected, int(status.split()[0]))
+                    headers = {name.lower(): value for name, value in headers}
+                    if method == "HEAD":
+                        self.assertEqual(b"", body)
+                    else:
+                        self.assertEqual(len(body), int(headers["content-length"]))
+                    if path.startswith("/css/"):
+                        self.assertEqual((PROJECT_ROOT / "css/crispr4p.css").read_bytes(), body)
+                    if payload in (b"name=ade6", b"name=ura4"):
+                        gene = payload.split(b"=")[1].upper()
+                        self.assertIn(gene + b" RESULT", body)
+                    if overrides.get("QUERY_STRING"):
+                        self.assertIn("error", json.loads(body))
+
+            self.assertEqual(
+                [("ade6", None, None, None), ("ura4", None, None, None)],
+                [call.args for call in design.call_args_list],
+            )
 
 
 if __name__ == "__main__":

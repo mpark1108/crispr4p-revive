@@ -1,13 +1,13 @@
 # CRISPR4P Revive
 
-CRISPR4P Revive is a Python 3 modernization and extension of the original CRISPR4P primer-design tool for *Schizosaccharomyces pombe*. It preserves the original sgRNA and deletion-design workflow while adding cut-site annotation, SpEDIT/pLSB cloning oligos, stop-cassette disruption design, wild-type restoration design, and PCR validation primers.
+CRISPR4P Revive is a Python 3 primer- and donor-design tool for *Schizosaccharomyces pombe*, based on CRISPR4P. It supports sgRNA selection, cut-site annotation, deletion design, SpEDIT/pLSB cloning oligos, stop-cassette disruption, wild-type restoration, and PCR validation.
 
 ## Features
 
 - Search by gene name or PomBase gene ID, chromosome interval, or oligo sequence
 - Identify candidate sgRNAs and report genomic similarity counts
 - Report PAM coordinates, Cas9 cut position, genomic region, CDS position, overlapping genes, and gene viability
-- Generate the original CRISPR4P deletion-design primers
+- Generate CRISPR4P deletion-design primers
 - Generate 52-nt SpEDIT/pLSB Golden Gate cloning oligos
 - Generate disruption donors using a packaged set of 23-nt stop-cassette candidates with optional diagnostic sites (PacI or SwaI).
 - Generate wild-type restoration donors and rescue-guide cloning oligos
@@ -16,9 +16,10 @@ CRISPR4P Revive is a Python 3 modernization and extension of the original CRISPR
 ## Requirements
 
 - Python 3
-- primer3-py
+- primer3-py 2.3.0
+- Gunicorn (Linux hosting)
 
-This version is currently tested with `primer3-py` 2.3.0. The `primer3-py` package is imported in Python as `primer3`.
+The `primer3-py` package is imported in Python as `primer3`.
 
 ## Installation
 
@@ -46,29 +47,15 @@ python webapp.py
 
 Then open [http://localhost:8080](http://localhost:8080).
 
-### Apache CGI hosting
+### Hosting
 
-`webapp.py` runs as CGI when invoked by Apache. Running `python webapp.py`
-directly starts the local preview server instead.
+On Linux, run the application with Gunicorn from the project directory:
 
-Configure an executable CGI wrapper named `webapp.py` to use the project's
-virtual-environment Python, adjusting these paths to the installation:
-
-```sh
-#!/bin/sh
-exec /path/to/crispr4p-revive/.venv/bin/python /path/to/crispr4p-revive/webapp.py
+```bash
+.venv/bin/python -m gunicorn -c gunicorn.conf.py webapp:application
 ```
 
-Serve `css/` as static files beside `webapp.py` in the public URL. Expose
-only the CGI entry point and CSS, not the entire checkout.
-
-The CGI account needs read access to the application, reference data, and
-templates, and write access to `precomputed/`. This pickle cache must not
-be writable by untrusted users.
-
-The hosting administrator configures CGI execution, directory/SELinux
-permissions, HTTPS, and service startup. See the
-[Apache CGI guide](https://httpd.apache.org/docs/2.4/howto/cgi.html).
+The supplied configuration uses four synchronous workers on `127.0.0.1:8080`.
 
 ## Reference data
 

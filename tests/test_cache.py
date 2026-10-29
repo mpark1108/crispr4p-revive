@@ -1,3 +1,4 @@
+import os
 import pickle
 import tempfile
 import unittest
@@ -67,7 +68,7 @@ class TestResultCache(unittest.TestCase):
         self.assertEqual(CACHE_RESULT, warm_result)
         self.assertEqual(1, compute.call_count)
 
-    def test_bad_warm_cache_is_removed_and_recomputed_without_rewrite(self):
+    def test_corrupt_cache_recovery(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             cache_path = Path(temporary_directory) / "result.pickle"
             cache_path.write_bytes(pickle.dumps(("only", "three", "items")))
@@ -77,27 +78,54 @@ class TestResultCache(unittest.TestCase):
 
             self.assertEqual(CACHE_RESULT, result)
             compute.assert_called_once_with()
-            self.assertFalse(cache_path.exists())
+            self.assertEqual(CACHE_RESULT, get_cached(cache_path, compute))
+            compute.assert_called_once_with()
 
-    def test_failed_save_silently_removes_partial_or_existing_file(self):
+    def test_failed_save_preserves_cache(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             cache_path = Path(temporary_directory) / "result.pickle"
             cache_path.write_bytes(b"old cache")
             unpickleable_result = (lambda: None, "hr", "primers", "matches")
 
-            save_cache(cache_path, unpickleable_result)
+            with self.assertLogs("crispr4p.cache", level="WARNING"):
+                save_cache(cache_path, unpickleable_result)
 
-            self.assertFalse(cache_path.exists())
+            self.assertEqual(b"old cache", cache_path.read_bytes())
+            with patch("crispr4p.cache.os.replace", side_effect=OSError("disk error")):
+                with self.assertLogs("crispr4p.cache", level="WARNING"):
+                    save_cache(cache_path, CACHE_RESULT)
+            self.assertEqual(b"old cache", cache_path.read_bytes())
+            self.assertEqual([cache_path], list(Path(temporary_directory).iterdir()))
+
+    def test_atomic_publish(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "result.pickle"
+            save_cache(target, CACHE_RESULT)
+            replacement = (["new table"], ("new hr",), ["new primers"], {})
+            replace = os.replace
+
+            def publish(source, destination):
+                self.assertEqual(CACHE_RESULT, pickle.loads(target.read_bytes()))
+                self.assertEqual(replacement, pickle.loads(Path(source).read_bytes()))
+                replace(source, destination)
+
+            with patch("crispr4p.cache.os.replace", side_effect=publish) as publish_mock:
+                save_cache(target, replacement)
+
+            publish_mock.assert_called_once()
+            self.assertEqual(replacement, get_cached(target, Mock()))
+            self.assertEqual([target], list(Path(directory).iterdir()))
 
     def test_failed_cold_save_still_returns_computed_result(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             cache_path = Path(temporary_directory) / "result.pickle"
             unpickleable_result = (lambda: None, "hr", "primers", "matches")
 
-            result = get_cached(
-                cache_path,
-                lambda: unpickleable_result,
-            )
+            with self.assertLogs("crispr4p.cache", level="WARNING"):
+                result = get_cached(
+                    cache_path,
+                    lambda: unpickleable_result,
+                )
 
             self.assertIs(unpickleable_result[0], result[0])
             self.assertEqual(unpickleable_result[1:], result[1:])

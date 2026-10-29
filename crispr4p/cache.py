@@ -1,13 +1,14 @@
 """Result cache."""
 
+import logging
 import os
 import pickle
+import tempfile
 
 
 def ensure_cache_dir(cache_directory):
     """Create the cache directory if needed."""
-    if not os.path.isdir(cache_directory):
-        os.makedirs(cache_directory)
+    os.makedirs(cache_directory, exist_ok=True)
 
 
 def cache_path(
@@ -49,13 +50,31 @@ def load_cache(cache_path):
 
 
 def save_cache(cache_path, result):
-    """Write a result, removing a partial file on failure."""
+    """Publish a complete pickle without exposing a partial write to readers."""
+    temporary_path = None
     try:
         data = pickle.dumps(_normalize_result(result), protocol=-1)
-        with open(cache_path, "wb") as cache_file:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=os.path.dirname(cache_path) or ".",
+            prefix=".cache-", suffix=".tmp", delete=False,
+        ) as cache_file:
+            temporary_path = cache_file.name
             cache_file.write(data)
-    except Exception:
-        drop_cache(cache_path)
+        os.replace(temporary_path, cache_path)
+    except Exception as error:
+        logging.getLogger(__name__).warning(
+            "Could not save cache %s: %s", cache_path, error
+        )
+    finally:
+        if temporary_path is not None:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                logging.getLogger(__name__).warning(
+                    "Could not remove cache temporary file %s: %s", temporary_path, error
+                )
 
 
 def drop_cache(cache_path):
@@ -66,17 +85,15 @@ def drop_cache(cache_path):
 
 def get_cached(cache_path, compute, is_cached=cache_exists):
     """Load a result or compute it."""
-    if not is_cached(cache_path):
-        result = _normalize_result(compute())
-        save_cache(cache_path, result)
-        return result
-
-    try:
-        return load_cache(cache_path)
-    except Exception:
-        # Match the old behavior: recompute a bad cache without rewriting it.
-        drop_cache(cache_path)
-        return _normalize_result(compute())
+    if is_cached(cache_path):
+        try:
+            return load_cache(cache_path)
+        except Exception:
+            # A different worker may already be replacing this file; don't unlink it.
+            pass
+    result = _normalize_result(compute())
+    save_cache(cache_path, result)
+    return result
 
 
 def _normalize_result(result):
